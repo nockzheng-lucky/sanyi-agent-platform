@@ -18,6 +18,8 @@ def _detail(row: dict) -> dict:
         "eventId": row["event_id"],
         "factorKey": row["factor_key"],
         "symbol": row["symbol"],
+        "contract": row.get("contract"),
+        "sourceKind": row.get("source_kind"),
         "frequency": row["frequency"],
         "status": row["status"],
         "formation": row.get("formation"),

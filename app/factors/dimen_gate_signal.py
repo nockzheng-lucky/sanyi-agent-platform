@@ -67,6 +67,8 @@ _OUTPUT_SCHEMA: Dict[str, Any] = {
                         "properties": {
                             "eventId": {"type": "string"},
                             "symbol": {"type": "string"},
+                            "contract": {"type": ["string", "null"]},
+                            "sourceKind": {"type": ["string", "null"]},
                             "frequency": {"type": "string"},
                             "status": {"type": "string", "enum": ["OPEN", "FORMATION_ABOVE"]},
                             "formation": {"type": "string"},
@@ -91,6 +93,8 @@ def _event_to_detail(row: dict) -> Dict[str, Any]:
     return {
         "eventId": row["event_id"],
         "symbol": row["symbol"],
+        "contract": row.get("contract"),
+        "sourceKind": row.get("source_kind"),
         "frequency": row["frequency"],
         "status": row["status"],
         "formation": row.get("formation"),

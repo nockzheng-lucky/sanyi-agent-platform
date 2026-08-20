@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS signal_events (
     event_id TEXT NOT NULL UNIQUE,
     factor_key TEXT NOT NULL,
     symbol TEXT NOT NULL,
+    contract TEXT,
+    source_kind TEXT,
     frequency TEXT NOT NULL,
     status TEXT NOT NULL,
     formation TEXT,
@@ -98,6 +100,11 @@ def init_db() -> None:
     if "is_baseline" not in cols:
         conn.execute("ALTER TABLE signal_events ADD COLUMN is_baseline INTEGER NOT NULL DEFAULT 0")
         conn.execute("UPDATE signal_events SET is_baseline = 1")
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(signal_events)").fetchall()]
+    if "contract" not in cols:
+        conn.execute("ALTER TABLE signal_events ADD COLUMN contract TEXT")
+    if "source_kind" not in cols:
+        conn.execute("ALTER TABLE signal_events ADD COLUMN source_kind TEXT")
     conn.commit()
 
 
@@ -282,14 +289,16 @@ def upsert_signal_event(event: Dict[str, Any], is_baseline: bool = False) -> boo
     now = event.get("first_seen_at") or _now_iso()
     if row is None:
         conn.execute(
-            "INSERT INTO signal_events(event_id, factor_key, symbol, frequency, status,"
-            " formation, gate_price, current_price, open_at, bar_time, summary,"
-            " payload_json, first_seen_at, last_seen_at, notified, is_baseline)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+            "INSERT INTO signal_events(event_id, factor_key, symbol, contract, source_kind,"
+            " frequency, status, formation, gate_price, current_price, open_at, bar_time,"
+            " summary, payload_json, first_seen_at, last_seen_at, notified, is_baseline)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
             (
                 event["event_id"],
                 event["factor_key"],
                 event["symbol"],
+                event.get("contract"),
+                event.get("source_kind"),
                 event["frequency"],
                 event["status"],
                 event.get("formation"),

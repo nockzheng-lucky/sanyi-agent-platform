@@ -89,7 +89,7 @@ function addSignalCard(ev) {
   top.className = "s-top";
   const title = document.createElement("div");
   title.className = "s-title";
-  title.textContent = `${ev.symbol} · ${ev.frequency}`;
+  title.textContent = `${ev.contract || ev.symbol} · ${ev.frequency}`;
   const badge = document.createElement("span");
   badge.className = `s-badge ${badgeCls}`;
   badge.textContent = statusText;
@@ -107,12 +107,18 @@ function addSignalCard(ev) {
   if (ev.currentPrice !== null && ev.currentPrice !== undefined) priceParts.push(`现价 ${ev.currentPrice}`);
   price.textContent = priceParts.join(" · ");
 
+  const contract = document.createElement("div");
+  contract.className = "s-row";
+  contract.textContent = ev.contract ? `品种 ${ev.symbol}` : `品种 ${ev.symbol} · 合约待标注`;
+
   card.appendChild(top);
   card.appendChild(time);
+  card.appendChild(contract);
   if (priceParts.length) card.appendChild(price);
 
   card.addEventListener("click", () => {
-    chatInput.value = `${ev.symbol} ${ev.frequency} ${statusText}，这个信号怎么看？`;
+    const target = ev.contract || ev.symbol;
+    chatInput.value = `${target} ${ev.frequency} ${statusText}，这个信号怎么看？`;
     chatInput.focus();
   });
 

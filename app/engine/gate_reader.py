@@ -71,7 +71,8 @@ def read_signals(
         conn = sqlite3.connect("file:%s?mode=ro" % path, uri=True, timeout=10)
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
-            "SELECT event_seq, event_id, event_kind, event_at, payload_json"
+            "SELECT event_seq, event_id, event_kind, event_at, payload_json,"
+            " tscode, source_kind"
             " FROM gate_event"
             " WHERE event_kind IN (?, ?) AND event_at >= ?"
             " ORDER BY event_at DESC, event_seq DESC",
@@ -104,27 +105,38 @@ def read_signals(
             continue
 
         kind = str(row["event_kind"] or "")
+        edge = str(payload.get("edge") or payload.get("first_action") or "")
         if kind == "formation":
             if not _is_formation_above(payload):
                 continue
             status = "FORMATION_ABOVE"
-        elif kind == "first-action" and payload.get("first_action") == "open":
+        elif kind == "first-action" and edge == "open":
             status = "OPEN"
         else:
             continue
 
         symbol = str(payload.get("sym") or "")
+        contract = (
+            str(row["tscode"] or "")
+            or str(payload.get("tscode") or "")
+            or str(payload.get("actual_contract") or "")
+        ) or None
+        source_kind = str(row["source_kind"] or payload.get("source_kind") or "")
         event_time = event_at.isoformat()
-        summary = str(payload.get("text") or "") or "%s %s 地门%s" % (
-            symbol,
+        label = contract or symbol
+        summary = str(payload.get("text") or "") or "%s %s 地门%s%s" % (
+            label,
             freq,
             "已开" if status == "OPEN" else "形成·无动作门上",
+            ("（%s）" % contract) if contract else "",
         )
         events.append(
             {
                 "event_id": str(row["event_id"]),
                 "factor_key": FACTOR_KEY,
                 "symbol": symbol,
+                "contract": contract,
+                "source_kind": source_kind,
                 "frequency": freq,
                 "status": status,
                 "formation": str(payload.get("formation") or ""),
