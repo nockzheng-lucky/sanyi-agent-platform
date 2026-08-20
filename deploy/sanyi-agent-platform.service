@@ -11,7 +11,7 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu/sanyi-agent-platform
 EnvironmentFile=/home/ubuntu/sanyi-agent-platform/.env
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=/home/ubuntu/sanyi-agent-platform/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100
+ExecStart=/home/ubuntu/sanyi-agent-platform/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100 --no-access-log
 Restart=on-failure
 RestartSec=3
 
