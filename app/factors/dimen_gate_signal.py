@@ -10,7 +10,7 @@
 - 本因子 handler 只做“查询最近信号”，供页面 Agent 的工具调用和未来 MCP/REST 使用。
 """
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ..db import list_signal_events
 from .base import FactorContext, FactorSpec
@@ -102,35 +102,70 @@ def _event_to_detail(row: dict) -> Dict[str, Any]:
     }
 
 
+def _parse_event_time(row: Dict[str, Any]) -> Optional[datetime]:
+    """解析门信号真实时间：优先 open_at，其次 bar_time，最后平台发现时间。"""
+    now = datetime.now()
+    for value in (row.get("open_at"), row.get("bar_time"), row.get("first_seen_at")):
+        if not value:
+            continue
+        text = str(value).strip()
+        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%m/%d %H:%M"):
+            try:
+                dt = datetime.strptime(text[:19], fmt)
+                if fmt == "%m/%d %H:%M":
+                    dt = dt.replace(year=now.year)
+                    if dt > now + timedelta(days=1):
+                        dt = dt.replace(year=now.year - 1)
+                return dt
+            except (ValueError, TypeError):
+                continue
+        try:
+            dt = datetime.fromisoformat(text)
+            if dt.tzinfo is not None:
+                dt = dt.astimezone().replace(tzinfo=None)
+            return dt
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
 async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any]:
     frequencies: List[str] = list(params.get("frequencies") or ["5m", "15m", "1h"])
     symbols: List[str] = list(params.get("symbols") or [])
     max_age = int(params.get("maxAgeMinutes") or 120)
     limit = int(params.get("limit") or 20)
 
-    since = None
-    if max_age > 0:
-        since = (datetime.now(timezone.utc) - timedelta(minutes=max_age)).isoformat()
-
+    # 先多取一些，按门信号真实时间过滤/排序后再截断。
     rows = list_signal_events(
         frequencies=frequencies,
         symbols=symbols,
-        since_iso=since,
-        limit=limit,
-        include_baseline=False,
+        limit=500,
+        include_baseline=True,
     )
-    events = [_event_to_detail(r) for r in rows]
+    now = datetime.now()
+    scoped = []
+    for row in rows:
+        event_time = _parse_event_time(row)
+        if event_time is None:
+            continue
+        if max_age > 0 and (now - event_time).total_seconds() > max_age * 60:
+            continue
+        scoped.append((event_time, row))
+    scoped.sort(key=lambda item: item[0], reverse=True)
+    scoped = scoped[:limit]
+
+    events = [_event_to_detail(r) for _, r in scoped]
     open_count = sum(1 for e in events if e["status"] == "OPEN")
     signal = "LONG" if open_count > 0 else "NONE"
 
     if not events:
-        summary = "最近 %d 分钟内没有新的地门开/地门形成（无动作门上）信号。" % max_age
+        summary = "最近 %d 分钟内没有地门开/地门形成（无动作门上）信号。" % max_age
     else:
         pieces = []
         for e in events[:8]:
             label = "已开" if e["status"] == "OPEN" else "形成·无动作门上"
             pieces.append("%s %s %s" % (e["symbol"], e["frequency"], label))
-        summary = "返回最近 %d 条信号：%s%s" % (
+        summary = "按信号时间返回最近 %d 条：%s%s" % (
             len(events),
             "；".join(pieces),
             "…" if len(events) > 8 else "",
