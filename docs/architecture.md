@@ -8,7 +8,7 @@
 2. 之后再开放给用户自己的 Agent（MCP / Skill / REST）。
 
 LLM 成本由平台承担；收费口径为**月费订阅**：
-- 轮询读取 gate_registry.json 不调用 LLM，不消耗任何 token，也不扣用户额度；
+- 轮询读取 gate_events.sqlite3 不调用 LLM，不消耗任何 token，也不扣用户额度；
 - 因子查询/信号推送不逐次扣费，但保留 usage_logs 审计；
 - DeepSeek 只在页面 Agent 实际对话/解读信号时产生 token 用量。
 
@@ -25,9 +25,11 @@ LLM 成本由平台承担；收费口径为**月费订阅**：
 ## 当前最小闭环
 
 ```
-sanyi 引擎 gate_registry.json（只读）
+sanyi green gate_events.sqlite3（只读）
   → 轮询器：只在交易时段，每 30 秒读一次
-  → 筛选：type=di + freq∈{5m,15m,1h} + live_status∈{已开,无动作·门上}
+  → 当天交易日窗口：今天，或昨天 21:00 之后
+  → 筛选：gate_type=地门 + freq∈{5m,15m,1h}
+           formation(门上) / first-action(open)
   → 新 event_id 入库 signal_events，并通过 SSE 推给页面
   → 页面 Agent 实时弹信号卡片；点击卡片让 LLM 解读
 
@@ -50,8 +52,8 @@ sanyi 引擎 gate_registry.json（只读）
 
 - `app/factor_registry.py`：因子的单一事实来源；页面 Agent 与未来 MCP/REST 共用。
 - `app/factors/dimen_gate_signal.py`：因子定义与查询逻辑；不重算引擎，只读事件。
-- `app/engine/gate_reader.py`：读 gate_registry.json 并筛选目标信号（只读）。
-- `app/engine/poller.py`：交易时段轮询 + baseline 去重 + 新事件推送。
+- `app/engine/gate_reader.py`：只读 gate_events.sqlite3，按当天交易日筛选目标信号。
+- `app/engine/poller.py`：交易时段轮询 + event_id 去重 + 新事件推送。
 - `app/db.py`：令牌哈希、额度、日志、会话、signal_events；原型用 SQLite。
 - `app/agent/`：LLM 客户端与工具调用循环。
 - `app/web/`：聊天页静态资源与实时信号卡片。
@@ -68,9 +70,9 @@ sanyi 引擎 gate_registry.json（只读）
 ## 后续演进
 
 ### Phase 2：真实数据联调
-- 把 `SANYI_GATE_REGISTRY_FILE` 指到 sanyi 引擎实际文件，核对字段；
-- 若生产上是 HTTP 而不是本地文件，给 gate_reader 增加只读 HTTP adapter；
-- 核对“已开 / 无动作·门上”映射、`open_at`/`t2_time` 时区与 30 秒延迟；
+- 把 `SANYI_GATE_EVENTS_DB` 指到 sanyi-green 的 `gate_events.sqlite3`；
+- 核对当天交易日窗口、formation(门上)/open 映射与 event_at 时区；
+- 若平台和 green 不同机，再增加只读同步或内网 SQL 访问；
 - 补因子级单元测试和回放样本。
 
 ### Phase 3：页面 Agent 生产化

@@ -1,9 +1,10 @@
 """地门信号因子：地门开 + 地门形成（无动作门上），5m / 15m / 1h。
 
-数据来源：现有 sanyi 引擎写出的 gate_registry.json（只读）。
-- 地门开           = live_status == "已开"
-- 地门形成(无动作门上) = live_status == "无动作·门上"
+数据来源：生产 green 的 gate_events.sqlite3（只读），与热力图“今日门信号”同源。
+- 地门开           = event_kind=first-action 且 first_action=open
+- 地门形成(无动作门上) = event_kind=formation 且形成侧为“门上”
 - 级别             = 5m / 15m / 1h
+- 只取当天交易日：今天，或昨天 21:00 之后
 
 事件语义：
 - “出现即提示”由 app/engine/poller.py 完成：新 event_id 出现即入库并推送页面。

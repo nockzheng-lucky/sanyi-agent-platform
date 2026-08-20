@@ -1,89 +1,117 @@
+import asyncio
 import json
+import sqlite3
 from datetime import datetime
 
 from app.engine.gate_reader import read_signals
 from app.engine.poller import SignalPoller
 from app.engine.session_clock import in_trading_session
 
+NOW = datetime(2026, 8, 21, 0, 30)
+
 
 def test_trading_sessions():
     now = datetime(2026, 8, 20, 9, 30)
-    sessions = "09:00-10:15,10:30-11:30,13:30-15:00,21:00-02:30"
+    sessions = "09:00-11:30,13:00-15:00,21:00-02:30"
     assert in_trading_session(now, sessions) is True
     assert in_trading_session(datetime(2026, 8, 20, 12, 0), sessions) is False
     assert in_trading_session(datetime(2026, 8, 20, 22, 30), sessions) is True
     assert in_trading_session(datetime(2026, 8, 21, 1, 0), sessions) is True
-    assert in_trading_session(datetime(2026, 8, 20, 10, 20), sessions) is False
+    assert in_trading_session(datetime(2026, 8, 20, 10, 20), sessions) is True
     assert in_trading_session(datetime(2026, 8, 20, 10, 0), "") is True
 
 
-def _write_registry(tmp_path, gates):
-    path = tmp_path / "gate_registry.json"
-    path.write_text(json.dumps({"gates": gates}, ensure_ascii=False), encoding="utf-8")
-    return str(path)
-
-
-def test_gate_reader_filters_target_signals(tmp_path):
-    path = _write_registry(
-        tmp_path,
-        {
-            "di_open": {
-                "key": "di_open", "type": "di", "freq": "5m", "sym": "AU",
-                "name": "黄金", "live_status": "已开", "formation": "门下",
-                "gate_price": 100, "open_at": "2026-08-20 09:35:30",
-                "t2_time": "2026-08-20 09:20:00",
-            },
-            "di_formation_above": {
-                "key": "di_formation_above", "type": "di", "freq": "15m", "sym": "CU",
-                "name": "沪铜", "live_status": "无动作·门上", "formation": "门上",
-                "gate_price": 70000, "t2_time": "2026-08-20 09:30:00",
-            },
-            "di_wrong_freq": {
-                "key": "di_wrong_freq", "type": "di", "freq": "1d", "sym": "AU",
-                "live_status": "已开",
-            },
-            "tian": {
-                "key": "tian", "type": "tian", "freq": "5m", "sym": "AU",
-                "live_status": "已开",
-            },
-            "di_below": {
-                "key": "di_below", "type": "di", "freq": "5m", "sym": "AU",
-                "live_status": "无动作·门下",
-            },
-        },
+def _create_db(tmp_path):
+    path = tmp_path / "gate_events.sqlite3"
+    conn = sqlite3.connect(str(path))
+    conn.execute(
+        "CREATE TABLE gate_event ("
+        "event_seq INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "event_id TEXT NOT NULL UNIQUE,"
+        "event_kind TEXT NOT NULL,"
+        "event_at TEXT NOT NULL,"
+        "payload_json TEXT NOT NULL"
+        ")"
     )
-
-    events = read_signals(path)
-    assert len(events) == 2
-    statuses = {e["symbol"]: e["status"] for e in events}
-    assert statuses == {"AU": "OPEN", "CU": "FORMATION_ABOVE"}
-    assert events[0]["factor_key"] == "dimen_gate_signal"
+    conn.commit()
+    return str(path), conn
 
 
-def test_poller_baseline_then_new_event(tmp_path):
-    path = _write_registry(
-        tmp_path,
-        {
-            "baseline": {
-                "key": "baseline", "type": "di", "freq": "5m", "sym": "AU",
-                "live_status": "已开", "open_at": "2026-08-20 09:35:30",
-            },
-        },
-    )
-    poller = SignalPoller(path=path, interval_seconds=1, sessions="")
-    import asyncio
-
-    first = asyncio.run(poller.scan_once())
-    assert first == []
-
-    data = json.loads(open(path, encoding="utf-8").read())
-    data["gates"]["new_open"] = {
-        "key": "new_open", "type": "di", "freq": "15m", "sym": "CU",
-        "live_status": "无动作·门上", "t2_time": "2026-08-20 10:15:30",
+def _payload(**overrides):
+    payload = {
+        "gate_type": "地门",
+        "freq": "5m",
+        "sym": "AU0",
+        "formation": "",
+        "first_action": None,
+        "gate_price": 100.0,
+        "current_price": None,
+        "text": "",
     }
-    open(path, "w", encoding="utf-8").write(json.dumps(data, ensure_ascii=False))
+    payload.update(overrides)
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def test_gate_reader_filters_today_sql_events(tmp_path):
+    path, conn = _create_db(tmp_path)
+    rows = [
+        ("open-1", "first-action", "2026-08-20T22:05:00",
+         _payload(freq="15m", sym="CU0", first_action="open", formation="门下",
+                  text="沪铜 15m 地门 门下已开门 门价70000")),
+        ("formation-above", "formation", "2026-08-20T23:15:00",
+         _payload(freq="5m", sym="AU0", text="5m 地门 沪金 门上 100")),
+        ("formation-below", "formation", "2026-08-20T23:20:00",
+         _payload(freq="5m", sym="AG0", text="5m 地门 白银 门下 200")),
+        ("close", "first-action", "2026-08-20T23:25:00",
+         _payload(freq="15m", sym="RB0", first_action="close", formation="门上",
+                  text="螺纹 15m 地门 门上已关门")),
+        ("tian", "formation", "2026-08-20T23:26:00",
+         _payload(gate_type="天门", freq="5m", sym="M0", text="5m 天门 豆粕 门下")),
+        ("wrong-freq", "formation", "2026-08-20T23:27:00",
+         _payload(freq="1d", sym="TA0", text="1d 地门 PTA 门上")),
+        ("yesterday-before-night", "formation", "2026-08-19T20:00:00",
+         _payload(freq="15m", sym="ZN0", text="15m 地门 沪锌 门上")),
+    ]
+    for event_id, kind, event_at, payload in rows:
+        conn.execute(
+            "INSERT INTO gate_event(event_id,event_kind,event_at,payload_json)"
+            " VALUES (?,?,?,?)",
+            (event_id, kind, event_at, payload),
+        )
+    conn.commit()
+
+    events = read_signals(path, now=NOW)
+    assert len(events) == 2
+    by_id = {e["event_id"]: e for e in events}
+    assert by_id["open-1"]["status"] == "OPEN"
+    assert by_id["open-1"]["frequency"] == "15m"
+    assert by_id["formation-above"]["status"] == "FORMATION_ABOVE"
+    assert by_id["formation-above"]["frequency"] == "5m"
+
+
+def test_poller_dedupes_by_event_id(tmp_path):
+    path, conn = _create_db(tmp_path)
+    conn.execute(
+        "INSERT INTO gate_event(event_id,event_kind,event_at,payload_json)"
+        " VALUES (?,?,?,?)",
+        ("today-open", "first-action", "2026-08-20T22:05:00",
+         _payload(first_action="open", formation="门下", text="5m 地门 沪金 已开")),
+    )
+    conn.commit()
+
+    poller = SignalPoller(path=path, interval_seconds=1, sessions="")
+    first = asyncio.run(poller.scan_once())
+    assert [e["event_id"] for e in first] == ["today-open"]
 
     second = asyncio.run(poller.scan_once())
-    assert len(second) == 1
-    assert second[0]["symbol"] == "CU"
-    assert second[0]["status"] == "FORMATION_ABOVE"
+    assert second == []
+
+    conn.execute(
+        "INSERT INTO gate_event(event_id,event_kind,event_at,payload_json)"
+        " VALUES (?,?,?,?)",
+        ("today-formation", "formation", "2026-08-20T23:30:00",
+         _payload(freq="15m", sym="ZN0", text="15m 地门 沪锌 门上")),
+    )
+    conn.commit()
+    third = asyncio.run(poller.scan_once())
+    assert [e["event_id"] for e in third] == ["today-formation"]

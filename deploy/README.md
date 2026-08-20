@@ -15,7 +15,7 @@
 
 ## 只读边界
 
-- 读：`/home/ubuntu/projects/sanyi-green/runtime/state/gate_registry.json`
+- 读：`/home/ubuntu/projects/sanyi-green/runtime/state/gate_events.sqlite3`
 - 写：仅 `/home/ubuntu/sanyi-agent-platform/data`
 - 不写、不删除、不改动 `/home/ubuntu/projects/sanyi*` 下任何内容。
 

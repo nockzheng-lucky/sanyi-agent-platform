@@ -20,7 +20,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ReadWritePaths=/home/ubuntu/sanyi-agent-platform/data
-ReadOnlyPaths=/home/ubuntu/projects/sanyi-green/runtime/state/gate_registry.json
+ReadOnlyPaths=/home/ubuntu/projects/sanyi-green/runtime/state/gate_events.sqlite3
 UMask=0077
 
 [Install]

@@ -1,98 +1,140 @@
-"""读取现有 sanyi 引擎写出的 gate_registry.json，筛选目标门信号。
+"""读取生产 green 的 gate_events.sqlite3（只读），筛选当天目标门信号。
 
-只读，不写上游文件；路径通过 SANYI_GATE_REGISTRY_FILE 配置。
+与 heatmap“今日门信号”同源：
+- 表：gate_event
+- 交易日窗口：今天任意时间，或昨天 21:00 之后（夜盘跨日）
+- 目标：gate_type=地门，freq∈{5m,15m,1h}，
+  - formation 且 门上（无动作门上）
+  - first-action 且 first_action=open（地门开）
 """
-import hashlib
 import json
+import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-STATUS_MAP = {
-    "已开": "OPEN",
-    "无动作·门上": "FORMATION_ABOVE",
-}
 
 FACTOR_KEY = "dimen_gate_signal"
 
 
-def _sha1(text: str) -> str:
-    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
+def _parse_event_at(text: str) -> Optional[datetime]:
+    if not text:
+        return None
+    value = str(text).strip()
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M",
+        "%Y%m%d",
+    ):
+        try:
+            return datetime.strptime(value[:19], fmt)
+        except (ValueError, TypeError):
+            continue
+    return None
 
 
-def _parse_registry(data: Any) -> Dict[str, Any]:
-    gates: Dict[str, Any] = {}
-    if isinstance(data, dict):
-        raw_gates = data.get("gates", data)
-        if isinstance(raw_gates, dict):
-            gates = raw_gates
-        elif isinstance(raw_gates, list):
-            for item in raw_gates:
-                if isinstance(item, dict) and item.get("key"):
-                    gates[str(item["key"])] = item
-    elif isinstance(data, list):
-        for item in data:
-            if isinstance(item, dict) and item.get("key"):
-                gates[str(item["key"])] = item
-    return gates
+def _is_trading_day(event_at: datetime, now: datetime) -> bool:
+    if event_at.date() == now.date():
+        return True
+    yesterday = now - timedelta(days=1)
+    return (
+        event_at.date() == yesterday.date()
+        and event_at.time() >= datetime.strptime("21:00", "%H:%M").time()
+    )
+
+
+def _trading_day_lower(now: datetime) -> datetime:
+    lower = now - timedelta(days=1)
+    return lower.replace(hour=21, minute=0, second=0, microsecond=0)
+
+
+def _is_formation_above(payload: Dict[str, Any]) -> bool:
+    formation = str(payload.get("formation") or "")
+    text = str(payload.get("text") or "")
+    return formation == "门上" or "门上" in text
 
 
 def read_signals(
     path: str,
     frequencies: Tuple[str, ...] = ("5m", "15m", "1h"),
-    symbol_filter: Optional[List[str]] = None,
+    now: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
-    """读取并归一化门信号。只返回新出现的候选事件，不负责去重。"""
+    """读取当天目标门事件。只读打开，不写上游 SQLite。"""
     if not path or not Path(path).exists():
         return []
+    current = now or datetime.now()
+    lower = _trading_day_lower(current)
+
+    conn = None
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
+        conn = sqlite3.connect("file:%s?mode=ro" % path, uri=True, timeout=10)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT event_seq, event_id, event_kind, event_at, payload_json"
+            " FROM gate_event"
+            " WHERE event_kind IN (?, ?) AND event_at >= ?"
+            " ORDER BY event_at DESC, event_seq DESC",
+            ("formation", "first-action", lower.isoformat()),
+        ).fetchall()
+    except sqlite3.Error:
         return []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     events: List[Dict[str, Any]] = []
-    for key, gate in _parse_registry(data).items():
-        if not isinstance(gate, dict):
+    for row in rows:
+        event_at = _parse_event_at(str(row["event_at"] or ""))
+        if event_at is None or not _is_trading_day(event_at, current):
             continue
-        if gate.get("type") != "di":
+        try:
+            payload = json.loads(row["payload_json"] or "{}")
+        except json.JSONDecodeError:
             continue
-        freq = str(gate.get("freq") or "")
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("gate_type") != "地门":
+            continue
+        freq = str(payload.get("freq") or "")
         if freq not in frequencies:
             continue
-        status_raw = str(gate.get("live_status") or "")
-        status = STATUS_MAP.get(status_raw)
-        if status is None:
-            continue
-        symbol = str(gate.get("sym") or "")
-        if symbol_filter and symbol not in symbol_filter:
+
+        kind = str(row["event_kind"] or "")
+        if kind == "formation":
+            if not _is_formation_above(payload):
+                continue
+            status = "FORMATION_ABOVE"
+        elif kind == "first-action" and payload.get("first_action") == "open":
+            status = "OPEN"
+        else:
             continue
 
-        open_at = str(gate.get("open_at") or "") or None
-        bar_time = str(gate.get("t2_time") or gate.get("t2_str") or "") or None
-        generated_at = open_at or bar_time
-        stable = "|".join([str(gate.get("key") or key), status_raw])
-        event_id = _sha1(stable)
-
-        summary = "%s %s 地门%s" % (
-            gate.get("name") or symbol,
+        symbol = str(payload.get("sym") or "")
+        event_time = event_at.isoformat()
+        summary = str(payload.get("text") or "") or "%s %s 地门%s" % (
+            symbol,
             freq,
-            "已开（做多观察）" if status == "OPEN" else "形成·无动作门上",
+            "已开" if status == "OPEN" else "形成·无动作门上",
         )
         events.append(
             {
-                "event_id": event_id,
+                "event_id": str(row["event_id"]),
                 "factor_key": FACTOR_KEY,
                 "symbol": symbol,
                 "frequency": freq,
                 "status": status,
-                "formation": str(gate.get("formation") or ""),
-                "gate_price": gate.get("gate_price"),
-                "current_price": gate.get("current_price"),
-                "open_at": open_at,
-                "bar_time": bar_time,
-                "generated_at": generated_at,
+                "formation": str(payload.get("formation") or ""),
+                "gate_price": payload.get("gate_price"),
+                "current_price": payload.get("current_price"),
+                "open_at": event_time if status == "OPEN" else None,
+                "bar_time": event_time,
+                "generated_at": event_time,
                 "summary": summary,
-                "payload_json": json.dumps(gate, ensure_ascii=False, default=str),
+                "payload_json": json.dumps(payload, ensure_ascii=False, default=str),
             }
         )
     return events

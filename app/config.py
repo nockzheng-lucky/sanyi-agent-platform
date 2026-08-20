@@ -45,11 +45,10 @@ CHAT_MAX_TOOL_ROUNDS = _int("SANYI_CHAT_MAX_TOOL_ROUNDS", 6)
 CHAT_MAX_MESSAGES = _int("SANYI_CHAT_MAX_MESSAGES", 20)
 
 # 因子与门信号读取
-# 门信号源：读取现有 sanyi 引擎写出的 gate_registry.json。
-# 正式部署时这里填绝对路径；本地联调填 sanyi 仓库对应文件。
-GATE_REGISTRY_FILE = os.getenv("SANYI_GATE_REGISTRY_FILE", "")
+# 门信号源：生产 green 的 gate_events.sqlite3（只读），与热力图“今日门信号”同源。
+GATE_EVENTS_DB = os.getenv("SANYI_GATE_EVENTS_DB", "")
 
-# 信号事件轮询：默认 30 秒一次，只在交易时段内读文件。
+# 信号事件轮询：默认 30 秒一次，只在交易时段内读 SQLite。
 SIGNAL_POLL_ENABLED = _bool("SANYI_SIGNAL_POLL_ENABLED", True)
 SIGNAL_POLL_SECONDS = _int("SANYI_SIGNAL_POLL_SECONDS", 30)
 
