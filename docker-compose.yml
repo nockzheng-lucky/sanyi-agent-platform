@@ -1,0 +1,13 @@
+services:
+  platform:
+    build: .
+    ports:
+      - "8100:8100"
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_MOCK: ${LLM_MOCK:-1}
+      SANYI_DATA_DIR: /srv/sanyi-agent-platform/data
+    volumes:
+      - ./data:/srv/sanyi-agent-platform/data

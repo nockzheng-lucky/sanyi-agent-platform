@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>三易引擎 Agent</title>
+  <link rel="stylesheet" href="/chat/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">三易</span>
+      <div>
+        <h1>三易引擎 Agent</h1>
+        <p class="subtitle">数据包装成因子，令牌鉴权，先测通再开放</p>
+      </div>
+    </div>
+    <div id="account" class="account"></div>
+  </header>
+
+  <section id="loginCard" class="login-card hidden">
+    <h2>输入你的平台令牌</h2>
+    <p class="hint">令牌只发送到本站服务器，保存在 HttpOnly cookie 中；不会留在页面 JS 里。</p>
+    <form id="loginForm">
+      <input id="tokenInput" type="password" autocomplete="off" placeholder="sk-sanyi-..." required />
+      <button type="submit">进入</button>
+    </form>
+    <p class="hint small">也可以打开 /chat?token=sk-... 自动登录；登录后建议把 URL 里的 token 参数去掉。</p>
+  </section>
+
+  <main id="chatCard" class="chat-card hidden">
+    <div id="messages" class="messages"></div>
+    <form id="chatForm" class="composer">
+      <textarea id="chatInput" rows="1" placeholder="例如：现在有什么因子？看看 15 分钟地门开做多信号"></textarea>
+      <button type="submit" id="sendBtn">发送</button>
+    </form>
+    <p class="disclaimer">因子结果仅供研究观察，不构成投资建议。AI 生成内容可能存在偏差。</p>
+  </main>
+
+  <script src="/chat/chat.js"></script>
+</body>
+</html>
