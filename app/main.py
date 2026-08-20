@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -6,15 +7,28 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import chat, factors, health, tokens
-from .config import SYSTEM_NAME
+from .api import chat, factors, health, signals, tokens
+from .config import SIGNAL_POLL_ENABLED, SYSTEM_NAME
 from .db import authenticate, create_session, init_db
+from .engine.poller import SignalPoller
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    poller_task = None
+    if SIGNAL_POLL_ENABLED:
+        poller = SignalPoller()
+        poller_task = asyncio.create_task(poller.run())
+    try:
+        yield
+    finally:
+        if poller_task is not None:
+            poller_task.cancel()
+            try:
+                await poller_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title=SYSTEM_NAME, version="0.1.0", lifespan=lifespan)
@@ -32,6 +46,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 app.include_router(health.router)
 app.include_router(factors.router)
+app.include_router(signals.router)
 app.include_router(tokens.router)
 app.include_router(chat.router)
 

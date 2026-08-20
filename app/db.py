@@ -50,6 +50,25 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     expires_at TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS signal_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    factor_key TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    frequency TEXT NOT NULL,
+    status TEXT NOT NULL,
+    formation TEXT,
+    gate_price REAL,
+    current_price REAL,
+    open_at TEXT,
+    bar_time TEXT,
+    summary TEXT,
+    payload_json TEXT,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    notified INTEGER NOT NULL DEFAULT 0
+);
 """
 
 _local = threading.local()
@@ -243,3 +262,81 @@ def list_usage(token_id: int, limit: int = 50) -> List[Dict[str, Any]]:
         (token_id, limit),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── 信号事件 ──────────────────────────────────────────────
+
+
+def upsert_signal_event(event: Dict[str, Any]) -> bool:
+    """写入或刷新一条信号事件。返回 True 表示这是新事件（需要推送）。"""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, notified FROM signal_events WHERE event_id = ?", (event["event_id"],)
+    ).fetchone()
+    now = event.get("first_seen_at") or _now_iso()
+    if row is None:
+        conn.execute(
+            "INSERT INTO signal_events(event_id, factor_key, symbol, frequency, status,"
+            " formation, gate_price, current_price, open_at, bar_time, summary,"
+            " payload_json, first_seen_at, last_seen_at, notified)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            (
+                event["event_id"],
+                event["factor_key"],
+                event["symbol"],
+                event["frequency"],
+                event["status"],
+                event.get("formation"),
+                event.get("gate_price"),
+                event.get("current_price"),
+                event.get("open_at"),
+                event.get("bar_time"),
+                event.get("summary"),
+                event.get("payload_json"),
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        return True
+    conn.execute(
+        "UPDATE signal_events SET last_seen_at = ?, current_price = ?,"
+        " payload_json = ? WHERE event_id = ?",
+        (now, event.get("current_price"), event.get("payload_json"), event["event_id"]),
+    )
+    conn.commit()
+    return False
+
+
+def mark_signal_notified(event_id: str) -> None:
+    conn = get_conn()
+    conn.execute("UPDATE signal_events SET notified = 1 WHERE event_id = ?", (event_id,))
+    conn.commit()
+
+
+def list_signal_events(
+    frequencies: Optional[List[str]] = None,
+    symbols: Optional[List[str]] = None,
+    since_iso: Optional[str] = None,
+    limit: int = 200,
+) -> List[Dict[str, Any]]:
+    sql = "SELECT * FROM signal_events WHERE 1=1"
+    args: List[Any] = []
+    if frequencies:
+        sql += " AND frequency IN (%s)" % ",".join("?" for _ in frequencies)
+        args.extend(frequencies)
+    if symbols:
+        sql += " AND symbol IN (%s)" % ",".join("?" for _ in symbols)
+        args.extend(symbols)
+    if since_iso:
+        sql += " AND first_seen_at >= ?"
+        args.append(since_iso)
+    sql += " ORDER BY id DESC LIMIT ?"
+    args.append(limit)
+    rows = get_conn().execute(sql, args).fetchall()
+    return [dict(r) for r in rows]
+
+
+def latest_signal_id() -> int:
+    row = get_conn().execute("SELECT MAX(id) AS m FROM signal_events").fetchone()
+    return int(row["m"] or 0)

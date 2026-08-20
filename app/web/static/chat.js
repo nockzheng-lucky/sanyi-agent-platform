@@ -1,6 +1,7 @@
 "use strict";
 
 const messagesEl = document.getElementById("messages");
+const signalFeedEl = document.getElementById("signalFeed");
 const loginCard = document.getElementById("loginCard");
 const chatCard = document.getElementById("chatCard");
 const accountEl = document.getElementById("account");
@@ -11,6 +12,7 @@ const sendBtn = document.getElementById("sendBtn");
 
 let history = [];
 let streaming = false;
+let signalStream = null;
 
 function showLogin() {
   loginCard.classList.remove("hidden");
@@ -22,6 +24,8 @@ function showChat(token) {
   loginCard.classList.add("hidden");
   chatCard.classList.remove("hidden");
   accountEl.textContent = `令牌：${token.name} · 已用 ${token.quotaUsed} / ${token.quotaTotal === -1 ? "不限" : token.quotaTotal}`;
+  loadLatestSignals();
+  connectSignalStream();
 }
 
 async function api(url, options = {}) {
@@ -59,6 +63,58 @@ function addChip(row, text, cls = "") {
   span.textContent = text;
   row.appendChild(span);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function formatSignalTime(value) {
+  if (!value) return "时间未知";
+  const text = String(value).replace("T", " ").slice(0, 19);
+  return text;
+}
+
+function addSignalCard(ev) {
+  const statusText = ev.status === "OPEN" ? "地门开" : "地门形成·无动作门上";
+  const card = document.createElement("div");
+  card.className = "signal-card";
+  const title = document.createElement("div");
+  title.className = "s-title";
+  title.textContent = `${ev.symbol} ${ev.frequency} ${statusText}`;
+  const meta = document.createElement("div");
+  meta.className = "s-meta";
+  meta.textContent = ev.summary || "";
+  const time = document.createElement("div");
+  time.className = "s-time";
+  time.textContent = `信号时间：${formatSignalTime(ev.generatedAt || ev.openAt || ev.barTime)}`;
+  card.appendChild(title);
+  card.appendChild(meta);
+  card.appendChild(time);
+  card.addEventListener("click", () => {
+    chatInput.value = `${ev.symbol} ${ev.frequency} ${statusText}，这个信号怎么看？`;
+    chatInput.focus();
+  });
+  signalFeedEl.prepend(card);
+  while (signalFeedEl.children.length > 50) signalFeedEl.lastChild.remove();
+}
+
+async function loadLatestSignals() {
+  try {
+    const data = await api("/api/v1/signal-events/latest?limit=20");
+    for (const ev of data.events.slice().reverse()) addSignalCard(ev);
+  } catch (_e) {
+    // 不阻塞聊天
+  }
+}
+
+function connectSignalStream() {
+  if (signalStream) return;
+  signalStream = new EventSource("/api/v1/signal-events/stream");
+  signalStream.addEventListener("signal", (msg) => {
+    try {
+      addSignalCard(JSON.parse(msg.data));
+    } catch (_e) {}
+  });
+  signalStream.onerror = () => {
+    // EventSource 自动重连；这里不打断聊天。
+  };
 }
 
 async function boot() {

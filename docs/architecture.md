@@ -22,26 +22,36 @@ LLM 成本由平台承担；因子调用按额度扣费；元信息接口免费�
 ## 当前最小闭环
 
 ```
+sanyi 引擎 gate_registry.json（只读）
+  → 轮询器：只在交易时段，每 30 秒读一次
+  → 筛选：type=di + freq∈{5m,15m,1h} + live_status∈{已开,无动作·门上}
+  → 新 event_id 入库 signal_events，并通过 SSE 推给页面
+  → 页面 Agent 实时弹信号卡片；点击卡片让 LLM 解读
+
 浏览器 /chat?token=sk-...
   → 服务端校验令牌，发 HttpOnly 会话 cookie
   → POST /api/chat（SSE）
   → LLM function calling
-       ├─ sanyi_list_factors       → GET /api/v1/factors 的同一注册表
-       └─ sanyi_evaluate_factor    → POST /api/v1/factors/evaluate
-                                        ├─ 参数 JSON Schema 校验
-                                        ├─ 短 TTL 缓存
-                                        ├─ 三易引擎因子计算（当前 MOCK）
-                                        ├─ 成功后扣额度
-                                        └─ 写 usage_logs
+       ├─ sanyi_list_factors       → 因子注册表
+       └─ sanyi_evaluate_factor    → 读取 signal_events 最近事件
+                                      ├─ 参数 JSON Schema 校验
+                                      ├─ 成功后扣额度
+                                      └─ 写 usage_logs
 ```
+
+“出现即提示”与“查询”是两条线：
+- 提示：poller → signal_events → SignalBus → `/api/v1/signal-events/stream`（SSE）；
+- 查询：Agent/REST → `/api/v1/factors/evaluate` → 同一张 signal_events。
 
 ## 目录职责
 
 - `app/factor_registry.py`：因子的单一事实来源；页面 Agent 与未来 MCP/REST 共用。
-- `app/factors/*.py`：每个因子一个文件；真实计算只允许出现在这里，不直接暴露三易引擎数据。
-- `app/db.py`：令牌哈希、额度、日志、会话；原型用 SQLite。
+- `app/factors/dimen_gate_signal.py`：因子定义与查询逻辑；不重算引擎，只读事件。
+- `app/engine/gate_reader.py`：读 gate_registry.json 并筛选目标信号（只读）。
+- `app/engine/poller.py`：交易时段轮询 + baseline 去重 + 新事件推送。
+- `app/db.py`：令牌哈希、额度、日志、会话、signal_events；原型用 SQLite。
 - `app/agent/`：LLM 客户端与工具调用循环。
-- `app/web/`：聊天页静态资源。
+- `app/web/`：聊天页静态资源与实时信号卡片。
 
 ## 关键设计约束
 
@@ -54,9 +64,10 @@ LLM 成本由平台承担；因子调用按额度扣费；元信息接口免费�
 
 ## 后续演进
 
-### Phase 2：因子真实接入
-- 在 `app/factors/dimen_gate_15m_long.py` 替换 MOCK；
-- 增加 `app/engine_adapter.py`，只读三易引擎/缓存，带超时、熔断、降级；
+### Phase 2：真实数据联调
+- 把 `SANYI_GATE_REGISTRY_FILE` 指到 sanyi 引擎实际文件，核对字段；
+- 若生产上是 HTTP 而不是本地文件，给 gate_reader 增加只读 HTTP adapter；
+- 核对“已开 / 无动作·门上”映射、`open_at`/`t2_time` 时区与 30 秒延迟；
 - 补因子级单元测试和回放样本。
 
 ### Phase 3：页面 Agent 生产化

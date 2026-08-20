@@ -5,6 +5,7 @@ import tempfile
 os.environ["SANYI_DATA_DIR"] = os.environ.get("SANYI_DATA_DIR") or tempfile.mkdtemp(prefix="sanyi-agent-test-")
 os.environ["LLM_MOCK"] = "1"
 os.environ["LLM_API_KEY"] = "unused-in-mock"
+os.environ["SANYI_SIGNAL_POLL_ENABLED"] = "0"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

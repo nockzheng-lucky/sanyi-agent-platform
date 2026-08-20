@@ -74,6 +74,19 @@ async def get_session_token(
     return record
 
 
+async def get_token_or_session(
+    request: Request,
+    sanyi_session: Optional[str] = Cookie(default=None),
+) -> dict:
+    """信号流等接口：页面走会话 cookie，外部 Agent 走 X-API-Token/Bearer。"""
+    raw = extract_token(request)
+    if raw:
+        record = authenticate(raw)
+        if record is not None:
+            return record
+    return await get_session_token(sanyi_session)
+
+
 def require_admin(request: Request) -> None:
     """原型期的令牌签发接口保护。默认关闭，开启后需要 ADMIN_KEY。"""
     from .config import ADMIN_KEY, ENABLE_TOKEN_ISSUE_API

@@ -38,7 +38,7 @@ def set_session_cookie(response: Response, session_raw: str, remember_hours: int
         httponly=True,
         samesite="lax",
         secure=False,
-        path="/api/chat",
+        path="/",
     )
 
 
@@ -68,7 +68,7 @@ async def login(payload: LoginRequest, response: Response):
 async def logout(request: Request, response: Response, token: dict = Depends(get_session_token)):
     raw = request.cookies.get(COOKIE_NAME, "")
     delete_session(raw)
-    response.delete_cookie(COOKIE_NAME, path="/api/chat")
+    response.delete_cookie(COOKIE_NAME, path="/")
     return {"code": 0, "message": "ok", "data": None}
 
 

@@ -101,6 +101,27 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   gap: 12px;
 }
 
+.signal-feed {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.signal-card {
+  border: 1px solid rgba(255,122,26,.35);
+  background: rgba(255,122,26,.07);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.signal-card .s-title { font-weight: 700; margin-bottom: 3px; }
+.signal-card .s-meta { color: var(--muted); font-size: 12px; }
+.signal-card .s-time { color: var(--green); }
+
 .msg { max-width: 78%; padding: 10px 14px; border-radius: 14px; line-height: 1.6; font-size: 15px; white-space: pre-wrap; }
 .msg.user { align-self: flex-end; background: #25304d; }
 .msg.assistant { align-self: flex-start; background: var(--panel2); }

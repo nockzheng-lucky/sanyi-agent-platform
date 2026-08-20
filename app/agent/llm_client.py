@@ -132,8 +132,8 @@ def _mock_once(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, An
                     "id": "call_mock_1",
                     "name": "sanyi_evaluate_factor",
                     "arguments": {
-                        "factorKey": "dimen_gate_15m_long",
-                        "params": {"maxAgeMinutes": 30},
+                        "factorKey": "dimen_gate_signal",
+                        "params": {"maxAgeMinutes": 120},
                     },
                 }
             ],

@@ -41,7 +41,23 @@ LLM_MOCK = _bool("LLM_MOCK", False)
 CHAT_MAX_TOOL_ROUNDS = _int("SANYI_CHAT_MAX_TOOL_ROUNDS", 6)
 CHAT_MAX_MESSAGES = _int("SANYI_CHAT_MAX_MESSAGES", 20)
 
-# 因子
-FACTOR_DIMEN_GATE_MOCK = _bool("FACTOR_DIMEN_GATE_MOCK", True)
+# 因子与门信号读取
+# 门信号源：读取现有 sanyi 引擎写出的 gate_registry.json。
+# 正式部署时这里填绝对路径；本地联调填 sanyi 仓库对应文件。
+GATE_REGISTRY_FILE = os.getenv("SANYI_GATE_REGISTRY_FILE", "")
+
+# 信号事件轮询：默认 30 秒一次，只在交易时段内读文件。
+SIGNAL_POLL_ENABLED = _bool("SANYI_SIGNAL_POLL_ENABLED", True)
+SIGNAL_POLL_SECONDS = _int("SANYI_SIGNAL_POLL_SECONDS", 30)
+
+# 交易时段（HH:MM-HH:MM，逗号分隔；支持跨零点段，如 21:00-02:30）。
+# 这是国内期货常用时段，具体品种夜盘差异很大，请按实际品种覆盖。
+TRADING_SESSIONS = os.getenv(
+    "SANYI_TRADING_SESSIONS",
+    "09:00-10:15,10:30-11:30,13:30-15:00,21:00-23:00",
+)
+
+# 门信号允许的级别
+GATE_FREQUENCIES = ("5m", "15m", "1h")
 
 SYSTEM_NAME = "三易引擎 Agent 平台"
