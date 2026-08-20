@@ -10,17 +10,18 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/sanyi-agent-platform
 EnvironmentFile=/home/ubuntu/sanyi-agent-platform/.env
+Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/home/ubuntu/sanyi-agent-platform/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100
 Restart=on-failure
 RestartSec=3
 
-# 基础加固（候选版，上线前由部署 Owner 审阅）
+# 基础加固
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ReadWritePaths=/home/ubuntu/sanyi-agent-platform/data
-ProtectHome=read-only
-# 门信号只读路径已包含在 ProtectHome=read-only 中
+ReadOnlyPaths=/home/ubuntu/projects/sanyi-green/runtime/state/gate_registry.json
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target
