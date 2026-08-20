@@ -85,12 +85,18 @@ async def chat_once(
     tool_calls = []
     for slot in tool_parts.values():
         if slot["name"]:
+            raw_arguments = slot["arguments"] or "{}"
             try:
-                args = json.loads(slot["arguments"] or "{}")
+                args = json.loads(raw_arguments)
             except json.JSONDecodeError:
                 args = {}
             tool_calls.append(
-                {"id": slot["id"] or "call_%d" % len(tool_calls), "name": slot["name"], "arguments": args}
+                {
+                    "id": slot["id"] or "call_%d" % len(tool_calls),
+                    "name": slot["name"],
+                    "arguments": args,
+                    "raw_arguments": raw_arguments,
+                }
             )
     return {
         "content": "".join(content_parts),
@@ -135,6 +141,7 @@ def _mock_once(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, An
                         "factorKey": "dimen_gate_signal",
                         "params": {"maxAgeMinutes": 120},
                     },
+                    "raw_arguments": "{\"factorKey\": \"dimen_gate_signal\", \"params\": {\"maxAgeMinutes\": 120}}",
                 }
             ],
             "usage": {"input": 120, "output": 20},

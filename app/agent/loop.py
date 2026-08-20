@@ -65,12 +65,28 @@ async def run_agent_stream(
             total_usage["output"] += int(agg.get("usage", {}).get("output") or 0)
 
             content = str(agg.get("content") or "")
-            if content:
-                history.append({"role": "assistant", "content": content})
             for chunk in agg.get("chunks") or []:
                 yield _sse("delta", {"text": chunk})
 
             tool_calls = agg.get("tool_calls") or []
+            assistant_msg = {
+                "role": "assistant",
+                "content": content if content else None,
+            }
+            if tool_calls:
+                assistant_msg["tool_calls"] = [
+                    {
+                        "id": call.get("id", "call_%d" % idx),
+                        "type": "function",
+                        "function": {
+                            "name": str(call.get("name") or ""),
+                            "arguments": call.get("raw_arguments")
+                            or json.dumps(call.get("arguments") or {}, ensure_ascii=False),
+                        },
+                    }
+                    for idx, call in enumerate(tool_calls)
+                ]
+            history.append(assistant_msg)
             if not tool_calls:
                 break
 
