@@ -33,10 +33,10 @@ _PARAMS_SCHEMA: Dict[str, Any] = {
         },
         "maxAgeMinutes": {
             "type": "integer",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 10080,
-            "default": 120,
-            "description": "可选。只返回最近 N 分钟内新出现的信号；默认 120 分钟。",
+            "default": 0,
+            "description": "可选。0=当天全部；大于 0 时只返回最近 N 分钟内的信号。",
         },
         "limit": {
             "type": "integer",
@@ -133,7 +133,7 @@ def _parse_event_time(row: Dict[str, Any]) -> Optional[datetime]:
 async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any]:
     frequencies: List[str] = list(params.get("frequencies") or ["5m", "15m", "1h"])
     symbols: List[str] = list(params.get("symbols") or [])
-    max_age = int(params.get("maxAgeMinutes") or 120)
+    max_age = int(params.get("maxAgeMinutes") or 0)
     limit = int(params.get("limit") or 20)
 
     # 先多取一些，按门信号真实时间过滤/排序后再截断。
@@ -160,7 +160,10 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
     signal = "LONG" if open_count > 0 else "NONE"
 
     if not events:
-        summary = "最近 %d 分钟内没有地门开/地门形成（无动作门上）信号。" % max_age
+        if max_age > 0:
+            summary = "最近 %d 分钟内没有地门开/地门形成（无动作门上）信号。" % max_age
+        else:
+            summary = "今天暂时没有新的地门开/地门形成（无动作门上）信号。"
     else:
         pieces = []
         for e in events[:8]:
