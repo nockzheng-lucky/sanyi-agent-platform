@@ -37,12 +37,15 @@ async def latest(
     frequencies: Optional[str] = Query(default=None),
     symbols: Optional[str] = Query(default=None),
     afterId: int = Query(default=0, ge=0),
-    limit: int = Query(default=200, ge=1, le=500),
+    limit: int = Query(default=50, ge=1, le=500),
+    includeBaseline: bool = Query(default=False),
     token: dict = Depends(get_token_or_session),
 ):
     freqs = [x.strip() for x in (frequencies or "").split(",") if x.strip()] or None
     syms = [x.strip() for x in (symbols or "").split(",") if x.strip()] or None
-    rows = list_signal_events(frequencies=freqs, symbols=syms, limit=limit)
+    rows = list_signal_events(
+        frequencies=freqs, symbols=syms, limit=limit, include_baseline=includeBaseline
+    )
     rows = [r for r in rows if int(r["id"]) > afterId]
     return {"code": 0, "message": "ok", "data": {"events": [_detail(r) for r in rows]}}
 

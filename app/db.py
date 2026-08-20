@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS signal_events (
     payload_json TEXT,
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
-    notified INTEGER NOT NULL DEFAULT 0
+    notified INTEGER NOT NULL DEFAULT 0,
+    is_baseline INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -92,6 +93,11 @@ def get_conn() -> sqlite3.Connection:
 def init_db() -> None:
     conn = get_conn()
     conn.executescript(_SCHEMA)
+    # 迁移旧库：加 is_baseline 列，并把存量行标记为 baseline（历史门不再当新信号展示）。
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(signal_events)").fetchall()]
+    if "is_baseline" not in cols:
+        conn.execute("ALTER TABLE signal_events ADD COLUMN is_baseline INTEGER NOT NULL DEFAULT 0")
+        conn.execute("UPDATE signal_events SET is_baseline = 1")
     conn.commit()
 
 
@@ -267,7 +273,7 @@ def list_usage(token_id: int, limit: int = 50) -> List[Dict[str, Any]]:
 # ── 信号事件 ──────────────────────────────────────────────
 
 
-def upsert_signal_event(event: Dict[str, Any]) -> bool:
+def upsert_signal_event(event: Dict[str, Any], is_baseline: bool = False) -> bool:
     """写入或刷新一条信号事件。返回 True 表示这是新事件（需要推送）。"""
     conn = get_conn()
     row = conn.execute(
@@ -278,8 +284,8 @@ def upsert_signal_event(event: Dict[str, Any]) -> bool:
         conn.execute(
             "INSERT INTO signal_events(event_id, factor_key, symbol, frequency, status,"
             " formation, gate_price, current_price, open_at, bar_time, summary,"
-            " payload_json, first_seen_at, last_seen_at, notified)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            " payload_json, first_seen_at, last_seen_at, notified, is_baseline)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
             (
                 event["event_id"],
                 event["factor_key"],
@@ -295,6 +301,7 @@ def upsert_signal_event(event: Dict[str, Any]) -> bool:
                 event.get("payload_json"),
                 now,
                 now,
+                1 if is_baseline else 0,
             ),
         )
         conn.commit()
@@ -319,9 +326,12 @@ def list_signal_events(
     symbols: Optional[List[str]] = None,
     since_iso: Optional[str] = None,
     limit: int = 200,
+    include_baseline: bool = True,
 ) -> List[Dict[str, Any]]:
     sql = "SELECT * FROM signal_events WHERE 1=1"
     args: List[Any] = []
+    if not include_baseline:
+        sql += " AND is_baseline = 0"
     if frequencies:
         sql += " AND frequency IN (%s)" % ",".join("?" for _ in frequencies)
         args.extend(frequencies)

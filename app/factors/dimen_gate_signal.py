@@ -117,6 +117,7 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
         symbols=symbols,
         since_iso=since,
         limit=limit,
+        include_baseline=False,
     )
     events = [_event_to_detail(r) for r in rows]
     open_count = sum(1 for e in events if e["status"] == "OPEN")

@@ -17,7 +17,7 @@ from ..config import (
     SIGNAL_POLL_SECONDS,
     TRADING_SESSIONS,
 )
-from ..db import mark_signal_notified, upsert_signal_event
+from ..db import latest_signal_id, mark_signal_notified, upsert_signal_event
 from .gate_reader import read_signals
 from .session_clock import in_trading_session
 from .signal_bus import bus
@@ -45,17 +45,17 @@ class SignalPoller:
 
     async def scan_once(self) -> List[Dict[str, Any]]:
         now_iso = _now_iso()
+        first_run = not self.baseline_done
+        # 只有“数据库还是空的第一次启动”才把当前存量全部记为 baseline；
+        # 之后重启时，库里已有历史，新出现的 event_id 仍然会正常推送。
+        baseline_run = first_run and latest_signal_id() == 0
         new_events: List[Dict[str, Any]] = []
         for event in read_signals(self.path, self.frequencies):
             event["first_seen_at"] = now_iso
-            is_new = upsert_signal_event(event)
-            if is_new:
+            is_new = upsert_signal_event(event, is_baseline=baseline_run)
+            if is_new and not baseline_run:
                 new_events.append(event)
-        # 首次扫描只入库存量，不推送。
-        first_run = not self.baseline_done
         self.baseline_done = True
-        if first_run:
-            return []
         for event in new_events:
             bus.publish(event)
             mark_signal_notified(event["event_id"])

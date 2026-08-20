@@ -2,6 +2,8 @@
 
 const messagesEl = document.getElementById("messages");
 const signalFeedEl = document.getElementById("signalFeed");
+const signalEmptyEl = document.getElementById("signalEmpty");
+const signalCountEl = document.getElementById("signalCount");
 const loginCard = document.getElementById("loginCard");
 const chatCard = document.getElementById("chatCard");
 const accountEl = document.getElementById("account");
@@ -71,33 +73,61 @@ function formatSignalTime(value) {
   return text;
 }
 
+function refreshSignalEmptyState() {
+  const hasCards = signalFeedEl.querySelector(".signal-card") !== null;
+  if (signalEmptyEl) signalEmptyEl.style.display = hasCards ? "none" : "block";
+}
+
 function addSignalCard(ev) {
   const statusText = ev.status === "OPEN" ? "地门开" : "地门形成·无动作门上";
+  const badgeCls = ev.status === "OPEN" ? "open" : "formation";
+
   const card = document.createElement("div");
   card.className = "signal-card";
+
+  const top = document.createElement("div");
+  top.className = "s-top";
   const title = document.createElement("div");
   title.className = "s-title";
-  title.textContent = `${ev.symbol} ${ev.frequency} ${statusText}`;
-  const meta = document.createElement("div");
-  meta.className = "s-meta";
-  meta.textContent = ev.summary || "";
+  title.textContent = `${ev.symbol} · ${ev.frequency}`;
+  const badge = document.createElement("span");
+  badge.className = `s-badge ${badgeCls}`;
+  badge.textContent = statusText;
+  top.appendChild(title);
+  top.appendChild(badge);
+
   const time = document.createElement("div");
-  time.className = "s-time";
+  time.className = "s-row s-time";
   time.textContent = `信号时间：${formatSignalTime(ev.generatedAt || ev.openAt || ev.barTime)}`;
-  card.appendChild(title);
-  card.appendChild(meta);
+
+  const price = document.createElement("div");
+  price.className = "s-row";
+  const priceParts = [];
+  if (ev.gatePrice !== null && ev.gatePrice !== undefined) priceParts.push(`门价 ${ev.gatePrice}`);
+  if (ev.currentPrice !== null && ev.currentPrice !== undefined) priceParts.push(`现价 ${ev.currentPrice}`);
+  price.textContent = priceParts.join(" · ");
+
+  card.appendChild(top);
   card.appendChild(time);
+  if (priceParts.length) card.appendChild(price);
+
   card.addEventListener("click", () => {
     chatInput.value = `${ev.symbol} ${ev.frequency} ${statusText}，这个信号怎么看？`;
     chatInput.focus();
   });
+
   signalFeedEl.prepend(card);
-  while (signalFeedEl.children.length > 50) signalFeedEl.lastChild.remove();
+  while (signalFeedEl.querySelectorAll(".signal-card").length > 50) {
+    signalFeedEl.lastChild.remove();
+  }
+  if (signalCountEl) signalCountEl.textContent = String(signalFeedEl.querySelectorAll(".signal-card").length);
+  refreshSignalEmptyState();
 }
 
 async function loadLatestSignals() {
   try {
-    const data = await api("/api/v1/signal-events/latest?limit=20");
+    // 只回放“服务启动后新出现”的信号；首次启动的历史 baseline 不展示。
+    const data = await api("/api/v1/signal-events/latest?limit=20&includeBaseline=false");
     for (const ev of data.events.slice().reverse()) addSignalCard(ev);
   } catch (_e) {
     // 不阻塞聊天
