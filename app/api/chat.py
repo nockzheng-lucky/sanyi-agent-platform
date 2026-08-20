@@ -8,7 +8,7 @@ from ..agent.loop import run_agent_stream
 from ..config import COOKIE_SECURE, SYSTEM_NAME
 from ..db import authenticate, create_session, delete_session, get_token_record
 from ..schemas import ChatRequest
-from ..security import get_session_token
+from ..security import get_session_token, get_token_or_session
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -73,8 +73,8 @@ async def logout(request: Request, response: Response, token: dict = Depends(get
 
 
 @router.post("")
-async def chat(payload: ChatRequest, token: dict = Depends(get_session_token)):
-    """SSE 流式聊天；LLM 用量记录到令牌，因子调用在因子服务内扣费。"""
+async def chat(payload: ChatRequest, token: dict = Depends(get_token_or_session)):
+    """SSE 流式聊天；页面走会话 Cookie，外部测试/Agent 可走 X-API-Token。"""
     return StreamingResponse(
         run_agent_stream(
             messages=[m.model_dump() for m in payload.messages],
