@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ..agent.loop import run_agent_stream
-from ..config import SYSTEM_NAME
+from ..config import COOKIE_SECURE, SYSTEM_NAME
 from ..db import authenticate, create_session, delete_session, get_token_record
 from ..schemas import ChatRequest
 from ..security import get_session_token
@@ -37,7 +37,7 @@ def set_session_cookie(response: Response, session_raw: str, remember_hours: int
         max_age=(remember_hours or 12) * 3600,
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=COOKIE_SECURE,
         path="/",
     )
 

@@ -32,10 +32,13 @@ ENABLE_TOKEN_ISSUE_API = _bool("SANYI_ENABLE_TOKEN_ISSUE_API", False)
 ADMIN_KEY = os.getenv("SANYI_ADMIN_KEY", "")
 
 # 页面 Agent 的 LLM
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-v4-flash")
 LLM_MOCK = _bool("LLM_MOCK", False)
+
+# 会话 cookie：本地 false；生产 HTTPS 反代后必须 true。
+COOKIE_SECURE = _bool("SANYI_COOKIE_SECURE", False)
 
 # 聊天循环
 CHAT_MAX_TOOL_ROUNDS = _int("SANYI_CHAT_MAX_TOOL_ROUNDS", 6)
