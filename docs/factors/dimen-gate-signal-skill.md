@@ -34,13 +34,15 @@ cost        0（月费订阅制，不逐次扣费）
 {
   "frequencies": ["5m", "15m", "1h"],
   "symbols": ["AU"],
-  "maxAgeMinutes": 120
+  "maxAgeMinutes": 120,
+  "limit": 20
 }
 ```
 
 - `frequencies`：可选。默认 `["5m", "15m", "1h"]`。
 - `symbols`：可选。只返回这些品种的信号；留空表示全部。
 - `maxAgeMinutes`：可选。默认 120，只返回最近 N 分钟内**新出现**的信号。
+- `limit`：可选。默认 20、最大 50，控制单次返回条数。
 
 ### 返回重点字段
 

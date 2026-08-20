@@ -37,6 +37,13 @@ _PARAMS_SCHEMA: Dict[str, Any] = {
             "default": 120,
             "description": "可选。只返回最近 N 分钟内新出现的信号；默认 120 分钟。",
         },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "可选。最多返回多少条信号；默认 20，控制上下文长度。",
+        },
     },
     "additionalProperties": False,
 }
@@ -99,6 +106,7 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
     frequencies: List[str] = list(params.get("frequencies") or ["5m", "15m", "1h"])
     symbols: List[str] = list(params.get("symbols") or [])
     max_age = int(params.get("maxAgeMinutes") or 120)
+    limit = int(params.get("limit") or 20)
 
     since = None
     if max_age > 0:
@@ -108,7 +116,7 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
         frequencies=frequencies,
         symbols=symbols,
         since_iso=since,
-        limit=200,
+        limit=limit,
     )
     events = [_event_to_detail(r) for r in rows]
     open_count = sum(1 for e in events if e["status"] == "OPEN")
@@ -121,7 +129,7 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
         for e in events[:8]:
             label = "已开" if e["status"] == "OPEN" else "形成·无动作门上"
             pieces.append("%s %s %s" % (e["symbol"], e["frequency"], label))
-        summary = "共 %d 条信号：%s%s" % (
+        summary = "返回最近 %d 条信号：%s%s" % (
             len(events),
             "；".join(pieces),
             "…" if len(events) > 8 else "",
