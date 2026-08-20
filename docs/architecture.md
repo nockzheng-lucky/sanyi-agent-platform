@@ -7,7 +7,10 @@
 1. 先在平台页面 `/chat` 使用 Agent 调 LLM + 三易因子；
 2. 之后再开放给用户自己的 Agent（MCP / Skill / REST）。
 
-LLM 成本由平台承担；因子调用按额度扣费；元信息接口免费。
+LLM 成本由平台承担；收费口径为**月费订阅**：
+- 轮询读取 gate_registry.json 不调用 LLM，不消耗任何 token，也不扣用户额度；
+- 因子查询/信号推送不逐次扣费，但保留 usage_logs 审计；
+- DeepSeek 只在页面 Agent 实际对话/解读信号时产生 token 用量。
 
 ## 与调研对象（open.hitick.top）的对应关系
 
@@ -17,7 +20,7 @@ LLM 成本由平台承担；因子调用按额度扣费；元信息接口免费�
 | 页面 Agent | 定制 Next.js + Dify + entry_token | FastAPI 页面 + OpenAI function calling（先最小闭环） |
 | 因子入口 | `subjective-signal/evaluate` 按 factorKey 路由 | `/api/v1/factors/evaluate` 同一模式 |
 | 用户自己的 Agent | MCP + Skill 文档 + HTTP | 后续按同样三层实现 |
-| 计费 | 成功后扣费，扣费失败直接报错 | 已实现同样规则 |
+| 计费 | 成功后扣费，扣费失败直接报错 | 三易改为月费订阅；保留成功/失败审计，不逐次扣额度 |
 
 ## 当前最小闭环
 
@@ -35,8 +38,8 @@ sanyi 引擎 gate_registry.json（只读）
        ├─ sanyi_list_factors       → 因子注册表
        └─ sanyi_evaluate_factor    → 读取 signal_events 最近事件
                                       ├─ 参数 JSON Schema 校验
-                                      ├─ 成功后扣额度
-                                      └─ 写 usage_logs
+                                      ├─ 月费制：不扣额度
+                                      └─ 写 usage_logs 审计
 ```
 
 “出现即提示”与“查询”是两条线：
@@ -59,7 +62,7 @@ sanyi 引擎 gate_registry.json（只读）
 2. 页面聊天的 cookie 只放服务端会话 ID，不放令牌。
 3. 工具白名单固定：LLM 只能调用 `sanyi_list_factors` / `sanyi_evaluate_factor`。
 4. 因子输出只给“结论 + 结构化 details”，不返回原始行情明细；机密因子可只返回“命中/未命中”。
-5. 成功后才扣费；扣费失败返回 402，不返回结果。
+5. 月费订阅制下不逐次扣费；所有调用仍写 usage_logs，后续据此做风控和成本核算。
 6. 三易引擎数据访问必须经过 adapter，不允许页面/Agent 直连生产库。
 
 ## 后续演进

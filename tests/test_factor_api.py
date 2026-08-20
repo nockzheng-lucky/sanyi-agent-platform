@@ -27,8 +27,9 @@ def test_factor_flow(client, token_headers):
     assert isinstance(result["details"]["events"], list)
     assert result["generatedAt"]
 
+    # 月费制：因子调用不逐次扣额度，只审计。
     me = client.get("/api/v1/me", headers=token_headers).json()["data"]["token"]
-    assert me["quotaUsed"] == 10
+    assert me["quotaUsed"] == 0
 
 
 def test_factor_invalid_params(client, token_headers):

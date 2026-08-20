@@ -15,6 +15,11 @@ sanyi 引擎 gate_registry.json（只读）
 同时保留查询接口 `/api/v1/factors/evaluate`，供页面 Agent 工具调用，
 后续再以 MCP / Skill / REST 开放给用户自己的 Agent。
 
+成本口径：
+- 轮询读文件**不消耗任何 LLM token，也不扣用户额度**；
+- 收费为月费订阅；因子调用和信号推送不逐次扣费，只做用量审计；
+- DeepSeek token 只在用户与 Agent 实际对话/点击解读时产生。
+
 ## 目录
 
 - `app/`：FastAPI 应用

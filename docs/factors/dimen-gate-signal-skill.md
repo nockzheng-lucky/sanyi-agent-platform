@@ -25,7 +25,7 @@
 ```text
 factorKey   dimen_gate_signal
 name        地门信号（地门开 / 地门形成·无动作门上，5m/15m/1h）
-cost        10（成功后扣费）
+cost        0（月费订阅制，不逐次扣费）
 ```
 
 ### 参数

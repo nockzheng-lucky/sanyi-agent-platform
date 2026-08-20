@@ -148,7 +148,7 @@ dimen_gate_signal = FactorSpec(
     ),
     params_schema=_PARAMS_SCHEMA,
     output_schema=_OUTPUT_SCHEMA,
-    cost=10,
+    cost=0,  # 月费订阅制：查询/推送不逐次扣费，usage_logs 仍保留调用审计
     cache_seconds=0,
     risk_note=(
         "该因子是技术结构观察信号，不代表未来涨跌，不应单独作为交易依据；"

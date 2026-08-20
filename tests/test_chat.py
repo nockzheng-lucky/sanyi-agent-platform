@@ -41,7 +41,7 @@ def test_chat_flow_with_mock_llm(client):
     assert "done" in names
 
     me = client.get("/api/v1/me", headers={"X-API-Token": token}).json()["data"]["token"]
-    assert me["quotaUsed"] == 10
+    assert me["quotaUsed"] == 0
 
 
 def test_chat_entry_token_is_exchanged_for_cookie(client):

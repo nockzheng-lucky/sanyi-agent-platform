@@ -50,11 +50,12 @@ GATE_REGISTRY_FILE = os.getenv("SANYI_GATE_REGISTRY_FILE", "")
 SIGNAL_POLL_ENABLED = _bool("SANYI_SIGNAL_POLL_ENABLED", True)
 SIGNAL_POLL_SECONDS = _int("SANYI_SIGNAL_POLL_SECONDS", 30)
 
-# 交易时段（HH:MM-HH:MM，逗号分隔；支持跨零点段，如 21:00-02:30）。
-# 这是国内期货常用时段，具体品种夜盘差异很大，请按实际品种覆盖。
+# 交易时段（HH:MM-HH:MM，逗号分隔；支持跨零点段）。
+# 覆盖全品种：白天 09:00-11:30 / 13:00-15:00，夜盘 21:00-02:30。
+# 读取的是最新文件，轮询跨过某品种的休市时段不会产生新事件，无害。
 TRADING_SESSIONS = os.getenv(
     "SANYI_TRADING_SESSIONS",
-    "09:00-10:15,10:30-11:30,13:30-15:00,21:00-23:00",
+    "09:00-11:30,13:00-15:00,21:00-02:30",
 )
 
 # 门信号允许的级别
