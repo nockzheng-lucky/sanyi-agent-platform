@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>注册 · 三易引擎</title>
+  <link rel="stylesheet" href="/chat/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">三易</span>
+      <div><h1>三易引擎 Agent</h1><p class="subtitle">手机号注册</p></div>
+    </div>
+  </header>
+  <section class="auth-card">
+    <h2>注册</h2>
+    <form id="registerForm" class="auth-form">
+      <div class="row">
+        <input id="phone" placeholder="手机号" autocomplete="tel" />
+        <button type="button" id="sendCodeBtn">发送验证码</button>
+      </div>
+      <input id="code" placeholder="短信验证码" inputmode="numeric" />
+      <input id="password" type="password" placeholder="设置密码（至少 8 位）" autocomplete="new-password" />
+      <label class="agree"><input id="agree" type="checkbox" /> 我已阅读并同意《用户协议（占位版）》</label>
+      <button type="submit">注册并登录</button>
+    </form>
+    <p id="formHint" class="form-hint"></p>
+    <p id="formError" class="form-error"></p>
+    <p class="hint small">已有账号？<a href="/login">去登录</a></p>
+  </section>
+  <script src="/chat/auth.js"></script>
+</body>
+</html>

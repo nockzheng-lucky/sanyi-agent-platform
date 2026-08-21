@@ -51,6 +51,54 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone_hash TEXT NOT NULL UNIQUE,
+    phone_masked TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    agreement_version TEXT,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sms_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone_hash TEXT NOT NULL,
+    purpose TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    verified INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    token_prefix TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    quota_total INTEGER NOT NULL DEFAULT -1,
+    quota_used INTEGER NOT NULL DEFAULT 0,
+    rate_limit_per_min INTEGER NOT NULL DEFAULT 60,
+    allow_ips TEXT,
+    expires_at TEXT,
+    last_used_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    session_hash TEXT NOT NULL UNIQUE,
+    user_agent TEXT,
+    ip TEXT,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS signal_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id TEXT NOT NULL UNIQUE,
@@ -105,6 +153,11 @@ def init_db() -> None:
         conn.execute("ALTER TABLE signal_events ADD COLUMN contract TEXT")
     if "source_kind" not in cols:
         conn.execute("ALTER TABLE signal_events ADD COLUMN source_kind TEXT")
+    usage_cols = [r["name"] for r in conn.execute("PRAGMA table_info(usage_logs)").fetchall()]
+    if "user_id" not in usage_cols:
+        conn.execute("ALTER TABLE usage_logs ADD COLUMN user_id INTEGER")
+    if "key_id" not in usage_cols:
+        conn.execute("ALTER TABLE usage_logs ADD COLUMN key_id INTEGER")
     conn.commit()
 
 
@@ -197,12 +250,15 @@ def log_usage(
     status: str = "ok",
     request_id: Optional[str] = None,
     detail: Optional[str] = None,
+    user_id: Optional[int] = None,
+    key_id: Optional[int] = None,
 ) -> None:
     conn = get_conn()
     conn.execute(
         "INSERT INTO usage_logs(token_id, service, action, factor_key, model,"
-        " input_tokens, output_tokens, cost, status, request_id, detail, created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " input_tokens, output_tokens, cost, status, request_id, detail, created_at,"
+        " user_id, key_id)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             token_id,
             service,
@@ -216,6 +272,8 @@ def log_usage(
             request_id,
             detail,
             _now_iso(),
+            user_id,
+            key_id,
         ),
     )
     conn.commit()

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException
 from jsonschema import Draft7Validator, ValidationError
 
+from .accounts import charge_user_key
 from .db import charge_after_success, log_usage
 from .factors import FACTOR_SPECS, FactorSpec
 from .factors.base import FactorContext, now_iso
@@ -101,7 +102,11 @@ class FactorRegistry:
             self._cache[cache_key] = (loop.time(), result)
 
         # 成功后扣费；扣费失败按调研到的 Hitick 规则：直接报错，不返回结果。
-        if not charge_after_success(token_record["id"], spec.cost):
+        if token_record.get("_table") == "user_keys":
+            charged = charge_user_key(token_record["id"], spec.cost)
+        else:
+            charged = charge_after_success(token_record["id"], spec.cost)
+        if not charged:
             raise HTTPException(
                 status_code=402,
                 detail={"code": 402, "message": "额度不足，扣费失败", "data": None},
@@ -109,6 +114,8 @@ class FactorRegistry:
 
         log_usage(
             token_id=token_record["id"],
+            user_id=token_record.get("_user_id"),
+            key_id=token_record.get("_key_id"),
             service="factor",
             action="evaluate",
             factor_key=factor_key,

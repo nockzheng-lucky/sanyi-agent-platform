@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Key 管理 · 三易引擎</title>
+  <link rel="stylesheet" href="/chat/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">三易</span>
+      <div><h1>三易引擎 Agent</h1><p class="subtitle">Key 管理</p></div>
+    </div>
+    <div class="account" id="account"></div>
+  </header>
+  <main class="keys-card">
+    <section class="key-create">
+      <h2>申请 Key</h2>
+      <form id="keyForm" class="auth-form">
+        <input id="keyName" placeholder="名称，例如：自己的Agent" />
+        <input id="expiresDays" type="number" placeholder="有效期天数（留空=长期）" min="1" />
+        <input id="allowIps" placeholder="IP 白名单（可选，逗号分隔）" />
+        <button type="submit">申请 Key</button>
+      </form>
+      <p id="newKey" class="new-key hidden"></p>
+    </section>
+    <section class="key-list">
+      <h2>我的 Key</h2>
+      <div id="keyList"></div>
+      <p class="hint small"><a href="/chat">进入聊天页面</a> · <a href="#" id="logoutLink">退出登录</a></p>
+    </section>
+  </main>
+  <script src="/chat/auth.js"></script>
+</body>
+</html>

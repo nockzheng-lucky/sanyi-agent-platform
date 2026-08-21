@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from ..accounts import get_user, user_key_sanitize
 from ..agent.loop import run_agent_stream
 from ..config import COOKIE_SECURE, SYSTEM_NAME
 from ..db import authenticate, create_session, delete_session, get_token_record
 from ..schemas import ChatRequest
-from ..security import get_session_token, get_token_or_session
+from ..security import get_actor, get_session_token
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -43,12 +44,19 @@ def set_session_cookie(response: Response, session_raw: str, remember_hours: int
 
 
 @router.get("/session")
-async def session(token: dict = Depends(get_session_token)):
-    return {
-        "code": 0,
-        "message": "ok",
-        "data": {"system": SYSTEM_NAME, "token": _sanitize(token)},
-    }
+async def session(actor: dict = Depends(get_actor)):
+    data: dict = {"system": SYSTEM_NAME}
+    if actor.get("_table") == "user_keys":
+        user = get_user(actor["_user_id"])
+        data["user"] = {
+            "id": user["id"],
+            "phoneMasked": user["phone_masked"],
+            "status": user["status"],
+        } if user else None
+        data["key"] = user_key_sanitize(actor)
+    else:
+        data["token"] = _sanitize(actor)
+    return {"code": 0, "message": "ok", "data": data}
 
 
 @router.post("/login")
@@ -73,12 +81,12 @@ async def logout(request: Request, response: Response, token: dict = Depends(get
 
 
 @router.post("")
-async def chat(payload: ChatRequest, token: dict = Depends(get_token_or_session)):
-    """SSE 流式聊天；页面走会话 Cookie，外部测试/Agent 可走 X-API-Token。"""
+async def chat(payload: ChatRequest, actor: dict = Depends(get_actor)):
+    """SSE 流式聊天；页面走用户会话 Cookie，外部 Agent 走 X-API-Token。"""
     return StreamingResponse(
         run_agent_stream(
             messages=[m.model_dump() for m in payload.messages],
-            token_record=token,
+            token_record=actor,
             request_id=payload.requestId or "",
         ),
         media_type="text/event-stream",

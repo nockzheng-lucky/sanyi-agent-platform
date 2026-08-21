@@ -25,10 +25,14 @@ function showLogin() {
   accountEl.textContent = "";
 }
 
-function showChat(token) {
+function showChat(actor) {
   loginCard.classList.add("hidden");
   chatCard.classList.remove("hidden");
-  accountEl.textContent = `令牌：${token.name} · 已用 ${token.quotaUsed} / ${token.quotaTotal === -1 ? "不限" : token.quotaTotal}`;
+  if (actor.user) {
+    accountEl.textContent = `手机号 ${actor.user.phoneMasked}`;
+  } else if (actor.token) {
+    accountEl.textContent = `令牌：${actor.token.name} · 已用 ${actor.token.quotaUsed} / ${actor.token.quotaTotal === -1 ? "不限" : actor.token.quotaTotal}`;
+  }
   loadLatestSignals();
   connectSignalStream();
 }
@@ -243,8 +247,21 @@ function connectSignalStream() {
 
 async function boot() {
   try {
-    const data = await api("/api/chat/session");
-    showChat(data.token);
+    const resp = await fetch("/api/chat/session", { credentials: "same-origin" });
+    if (resp.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (resp.status === 403) {
+      window.location.href = "/keys";
+      return;
+    }
+    const body = await resp.json();
+    if (resp.ok && body.code === 0) {
+      showChat(body.data || {});
+    } else {
+      showLogin();
+    }
   } catch (_e) {
     showLogin();
   }

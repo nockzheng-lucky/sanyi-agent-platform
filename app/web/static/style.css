@@ -38,6 +38,9 @@ body {
 h1 { font-size: 18px; }
 .subtitle { color: var(--muted); font-size: 12px; }
 .account { color: var(--muted); font-size: 13px; }
+.topnav { display: flex; align-items: center; gap: 14px; }
+.topnav a { color: var(--muted); text-decoration: none; font-size: 13px; }
+.topnav a:hover { color: var(--text); }
 
 .login-card, .chat-card {
   max-width: 920px;
@@ -224,6 +227,43 @@ textarea { resize: none; min-height: 44px; max-height: 160px; }
 #sendBtn { width: 90px; }
 
 .disclaimer { padding: 0 14px 12px; color: var(--muted); font-size: 12px; text-align: center; }
+
+.auth-card, .keys-card {
+  max-width: 520px;
+  margin: 6vh auto 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 26px;
+}
+
+.auth-card h2, .keys-card h2 { margin-bottom: 14px; }
+.auth-form { display: flex; flex-direction: column; gap: 10px; }
+.auth-form .row { display: flex; gap: 8px; }
+.auth-form .row button { white-space: nowrap; }
+.agree { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.form-error { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 16px; }
+.form-hint { color: var(--green); font-size: 13px; margin-top: 10px; min-height: 16px; }
+
+.key-create { margin-bottom: 20px; }
+.new-key {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(51,209,122,.45);
+  background: rgba(51,209,122,.08);
+  border-radius: 10px;
+  font-size: 13px;
+  word-break: break-all;
+}
+.key-list { display: flex; flex-direction: column; gap: 8px; }
+.key-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  font-size: 14px;
+}
+.key-row small { color: var(--muted); font-size: 12px; }
+.key-actions { display: flex; gap: 6px; }
+.key-actions button { padding: 7px 10px; font-size: 12px; }
 
 .hidden { display: none !important; }
 
