@@ -8,7 +8,9 @@
 
 ```
 未登录用户
-  → /register 注册（用户名 + 密码 + 同意协议）
+  → /register 输入手机号
+  → 发送短信验证码（本地/测试环境可走 MOCK 通道）
+  → 输入验证码 + 设置密码 + 同意用户协议
   → 自动登录并跳转 /chat
   → 系统检查：有没有可用 Key？
        ├─ 没有 → 引导到 /keys 申请 Key
@@ -29,15 +31,20 @@ Admin 登录 → 用户列表、Key 列表、禁用/启用、用量查询
 
 ```text
 users
-  id, username(unique), password_hash, status,
+  id, phone_hash(unique), phone_masked, password_hash, status,
   agreement_version, created_at, last_login_at
+
+sms_codes
+  id, phone_hash, code_hash, purpose, expires_at,
+  attempts, verified, created_at
 
 user_keys
   id, user_id -> users.id,
   name, token_hash, token_prefix, status(active/revoked),
   quota_total, quota_used,
   rate_limit_per_min, allow_ips,
-  expires_at, last_used_at, created_at
+  expires_at NULLABLE,           -- 可选：不填=长期，安全靠撤销/轮换
+  last_used_at, created_at
 
 chat_sessions（扩展）
   id, user_id -> users.id,
@@ -57,16 +64,22 @@ usage_logs（扩展）
 ### 3.1 认证
 
 ```text
-POST /api/v1/auth/register     {username, password, agree:true}
-POST /api/v1/auth/login        {username, password}
+POST /api/v1/auth/sms-code    {phone, purpose:"register"}  发送验证码
+POST /api/v1/auth/register    {phone, code, password, agree:true}
+POST /api/v1/auth/login       {phone, password}
 POST /api/v1/auth/logout
-GET  /api/v1/auth/me           当前用户 + 会话状态
+GET  /api/v1/auth/me          当前用户 + 会话状态
 ```
+
+手机号规则：
+- 只接受中国大陆手机号格式（MVP），存 HMAC(phone) 哈希 + 掩码尾号；
+- 验证码 6 位，5 分钟有效，同号 60 秒一次、单日上限；
+- 短信通道做成 adapter：本地 MOCK（日志/固定码），101 接真实短信前不放开注册。
 
 安全规则：
 - 密码只存 argon2/bcrypt 哈希；
-- 登录/注册按 IP + 用户名限流，连续失败锁定；
-- 登录错误统一返回“用户名或密码错误”，不暴露用户是否存在；
+- 登录/注册按 IP + 手机号限流，连续失败锁定；
+- 登录错误统一返回“手机号或密码错误”，不暴露用户是否存在；
 - 会话 ID 服务端存储，HttpOnly + SameSite=Lax + Secure(生产)；
 - 登录成功后轮换 session id。
 
@@ -74,7 +87,7 @@ GET  /api/v1/auth/me           当前用户 + 会话状态
 
 ```text
 GET    /api/v1/keys                我的 Key 列表（不含明文）
-POST   /api/v1/keys               申请 Key {name, expiresInDays, allowIps?}
+POST   /api/v1/keys               申请 Key {name, expiresInDays?, allowIps?}
 POST   /api/v1/keys/{id}/reveal   查看 Key（需重新输入密码或二次确认）
 POST   /api/v1/keys/{id}/revoke   撤销
 POST   /api/v1/keys/{id}/rotate   轮换（旧 Key 立即失效）
@@ -84,8 +97,9 @@ GET    /api/v1/keys/{id}/usage    该 Key 的用量
 规则：
 - 明文只显示一次，库存 SHA-256；
 - 每用户最多 5 个 active Key（MVP）；
-- 默认有效期 90 天，可申请 30/90/365；
-- Key 与订阅状态绑定：订阅有效才可调用因子。
+- `expiresInDays` 可选：不填 = 长期 Key，安全靠撤销/轮换；填 30/90/365 则到期失效；
+- **Key 有效期不负责控制月费**。Key 只负责“身份凭证”，订阅单独控制“能不能用”；
+- 月费到期时：Key 保留，但因子/聊天返回明确提示“订阅已到期”，续费后立即恢复。
 
 ### 3.3 订阅与用量（月费制占位）
 
@@ -94,11 +108,11 @@ GET /api/v1/subscription          {status, expiresAt, plan}
 GET /api/v1/usage                最近调用记录
 ```
 
-当前无支付，MVP 规则：
-- 新注册用户默认 `trial`，有效期 7 天；
-- 到期后因子调用返回明确错误；
-- 管理端可手动激活/延期；
-- 支付和真实订阅后续接。
+当前无支付，MVP 规则（**无试用期**）：
+- 用户注册成功后即为 `active`，没有 trial；
+- 未来接入支付后，改为“支付成功才 active”，未支付不可用；
+- 管理端现在可手动停用/恢复（风控用），不提供免费延期概念；
+- 真实月费订阅上线前，所有 MVP 用户视为已授权测试用户。
 
 ### 3.4 页面聊天归属
 
@@ -126,11 +140,12 @@ MVP 先保证功能，UIUX 后续统一重做。
 
 ## 5. 实施步骤（12:00 后开始）
 
-### Phase 1：认证与用户（约 2 小时）
-- [ ] users 表 + 密码哈希 + 注册/登录/登出 API；
+### Phase 1：手机号认证与用户（约 2.5 小时）
+- [ ] users/sms_codes 表 + 手机号 HMAC + 密码哈希；
+- [ ] 短信 adapter（MOCK 先行）+ 注册/登录/登出 API；
 - [ ] 会话升级为 user session；
-- [ ] 登录/注册限流与统一错误；
-- [ ] 单元测试：注册、登录、密码错误、会话过期、登出。
+- [ ] 登录/注册/验证码限流与统一错误；
+- [ ] 单元测试：发码、注册、登录、密码错误、会话过期、登出。
 
 ### Phase 2：Key 生命周期（约 1.5 小时）
 - [ ] user_keys 表 + 迁移脚本（备份优先）；
@@ -151,7 +166,8 @@ MVP 先保证功能，UIUX 后续统一重做。
 - [ ] 回滚方案：恢复备份 DB + 回退 commit。
 
 ### Phase 5：后续（不阻塞 MVP）
-- [ ] 邮箱/手机验证、密码找回；
+- [ ] 真实短信供应商接入；
+- [ ] 密码找回（短信验证码重置）；
 - [ ] 管理后台；
 - [ ] 支付/月费订阅；
 - [ ] HTTPS 域名 + 正式 UIUX。
@@ -166,10 +182,10 @@ MVP 先保证功能，UIUX 后续统一重做。
 6. 旧数据不丢，signal_events 与门信号推送不受影响；
 7. 测试全绿，101 部署可回滚。
 
-## 7. 需要你确认的问题
+## 7. 已确认决策
 
-1. 注册字段：先只要“用户名 + 密码”，还是必须手机号/邮箱？
-2. Key 默认有效期和每用户最多数量；
-3. 新用户试用期：7 天是否合适；
-4. 用户协议文案现在有没有，还是我先写占位版；
-5. 实施是先在本地完成再部署 101，还是边做边上（建议前者）。
+1. 注册：**手机号注册**（短信验证码；先 MOCK，接入真实短信前不开放线上注册）；
+2. Key：**有效期可选**，不填 = 长期；Key 只做身份凭证，**不控制月费**，订阅单独控制；
+3. 试用期：**无**。MVP 阶段注册即 active；接支付后改为支付成功才 active；
+4. 用户协议：先写占位版。这属于合规要求的一部分（用户协议/隐私政策/风险提示），正式收费前必须替换为最终版并法务确认；
+5. 实施顺序：**本地开发测试完成 → 再部署 101**，保留回滚。
