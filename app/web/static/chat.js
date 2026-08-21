@@ -11,8 +11,6 @@ const loginForm = document.getElementById("loginForm");
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
 const sendBtn = document.getElementById("sendBtn");
-const soundBtn = document.getElementById("soundBtn");
-const notifyBtn = document.getElementById("notifyBtn");
 
 let history = [];
 let streaming = false;
@@ -35,25 +33,15 @@ function showChat(token) {
   connectSignalStream();
 }
 
-function updateSoundButton() {
-  if (soundBtn) soundBtn.textContent = soundEnabled ? "声音 开" : "声音 关";
-  if (soundBtn) soundBtn.classList.toggle("on", soundEnabled);
-}
-
-function updateNotifyButton() {
-  if (!("Notification" in window)) {
-    notifyBtn.textContent = "不支持";
-    notifyBtn.disabled = true;
-    return;
+function maybeRequestNotification() {
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "granted") {
+    notifyEnabled = true;
+  } else if (Notification.permission === "default") {
+    Notification.requestPermission().then((permission) => {
+      notifyEnabled = permission === "granted";
+    });
   }
-  if (Notification.permission === "denied") {
-    notifyBtn.textContent = "通知 被禁";
-    notifyBtn.classList.remove("on");
-    notifyEnabled = false;
-    return;
-  }
-  notifyBtn.textContent = notifyEnabled ? "通知 开" : "通知 关";
-  notifyBtn.classList.toggle("on", notifyEnabled);
 }
 
 function ensureAudio() {
@@ -105,32 +93,10 @@ function notifySignal(ev) {
   };
 }
 
-document.addEventListener("pointerdown", ensureAudio, { once: true });
-
-if (soundBtn) {
-  soundBtn.addEventListener("click", () => {
-    soundEnabled = !soundEnabled;
-    localStorage.setItem("sanyi.sound", soundEnabled ? "1" : "0");
-    updateSoundButton();
-    if (soundEnabled) playChime();
-  });
-}
-
-if (notifyBtn) {
-  notifyBtn.addEventListener("click", async () => {
-    if (!("Notification" in window)) return;
-    if (Notification.permission === "default") {
-      await Notification.requestPermission();
-    }
-    if (Notification.permission === "granted") {
-      notifyEnabled = !notifyEnabled;
-    }
-    updateNotifyButton();
-  });
-}
-
-updateSoundButton();
-updateNotifyButton();
+document.addEventListener("pointerdown", () => {
+  ensureAudio();
+  maybeRequestNotification();
+}, { once: true });
 
 async function api(url, options = {}) {
   const resp = await fetch(url, {
