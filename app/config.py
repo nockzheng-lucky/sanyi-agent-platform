@@ -3,7 +3,9 @@
 所有值都来自环境变量，默认值只保证本地骨架能启动。
 生产环境请用密钥管理系统注入，不要把真实密钥写进仓库。
 """
+import hashlib
 import os
+import secrets
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -25,6 +27,30 @@ def _bool(name: str, default: bool = False) -> bool:
 DATA_DIR = Path(os.getenv("SANYI_DATA_DIR", "./data")).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "platform.sqlite3"
+
+# 手机号 HMAC 密钥：优先环境变量；本地/首次启动自动生成到 data/phone_secret（600）。
+PHONE_SECRET_PATH = DATA_DIR / "phone_secret"
+
+
+def _phone_hash_secret() -> str:
+    env = os.getenv("SANYI_PHONE_HASH_SECRET", "").strip()
+    if env:
+        return env
+    if PHONE_SECRET_PATH.exists():
+        return PHONE_SECRET_PATH.read_text(encoding="utf-8").strip()
+    value = secrets.token_hex(32)
+    PHONE_SECRET_PATH.write_text(value, encoding="utf-8")
+    try:
+        PHONE_SECRET_PATH.chmod(0o600)
+    except OSError:
+        pass
+    return value
+
+
+PHONE_HASH_SECRET = _phone_hash_secret()
+
+# 短信：MOCK=true 时验证码直接在返回的 debugCode 里（仅本地/内测）。
+SMS_MOCK = _bool("SANYI_SMS_MOCK", True)
 
 # 令牌
 TOKEN_RATE_LIMIT_PER_MIN = _int("SANYI_TOKEN_RATE_LIMIT_PER_MIN", 60)
