@@ -78,9 +78,26 @@ function refreshSignalEmptyState() {
   if (signalEmptyEl) signalEmptyEl.style.display = hasCards ? "none" : "block";
 }
 
+function firstDefined(...values) {
+  for (const value of values) {
+    if (value !== null && value !== undefined && value !== "") return value;
+  }
+  return null;
+}
+
 function addSignalCard(ev) {
   const statusText = ev.status === "OPEN" ? "地门开" : "地门形成·无动作门上";
   const badgeCls = ev.status === "OPEN" ? "open" : "formation";
+  const symbol = firstDefined(ev.symbol);
+  const frequency = firstDefined(ev.frequency);
+  const contractValue = firstDefined(ev.contract);
+  const eventTime = firstDefined(
+    ev.generatedAt, ev.generated_at,
+    ev.openAt, ev.open_at,
+    ev.barTime, ev.bar_time
+  );
+  const gatePrice = firstDefined(ev.gatePrice, ev.gate_price);
+  const currentPrice = firstDefined(ev.currentPrice, ev.current_price);
 
   const card = document.createElement("div");
   card.className = "signal-card";
@@ -89,7 +106,7 @@ function addSignalCard(ev) {
   top.className = "s-top";
   const title = document.createElement("div");
   title.className = "s-title";
-  title.textContent = `${ev.contract || ev.symbol} · ${ev.frequency}`;
+  title.textContent = `${contractValue || symbol} · ${frequency}`;
   const badge = document.createElement("span");
   badge.className = `s-badge ${badgeCls}`;
   badge.textContent = statusText;
@@ -98,18 +115,18 @@ function addSignalCard(ev) {
 
   const time = document.createElement("div");
   time.className = "s-row s-time";
-  time.textContent = `信号时间：${formatSignalTime(ev.generatedAt || ev.openAt || ev.barTime)}`;
+  time.textContent = `信号时间：${formatSignalTime(eventTime)}`;
 
   const price = document.createElement("div");
   price.className = "s-row";
   const priceParts = [];
-  if (ev.gatePrice !== null && ev.gatePrice !== undefined) priceParts.push(`门价 ${ev.gatePrice}`);
-  if (ev.currentPrice !== null && ev.currentPrice !== undefined) priceParts.push(`现价 ${ev.currentPrice}`);
+  if (gatePrice !== null) priceParts.push(`门价 ${gatePrice}`);
+  if (currentPrice !== null) priceParts.push(`现价 ${currentPrice}`);
   price.textContent = priceParts.join(" · ");
 
   const contract = document.createElement("div");
   contract.className = "s-row";
-  contract.textContent = ev.contract ? `品种 ${ev.symbol}` : `品种 ${ev.symbol} · 合约待标注`;
+  contract.textContent = contractValue ? `品种 ${symbol}` : `品种 ${symbol} · 合约待标注`;
 
   card.appendChild(top);
   card.appendChild(time);
@@ -117,8 +134,8 @@ function addSignalCard(ev) {
   if (priceParts.length) card.appendChild(price);
 
   card.addEventListener("click", () => {
-    const target = ev.contract || ev.symbol;
-    chatInput.value = `${target} ${ev.frequency} ${statusText}，这个信号怎么看？`;
+    const target = contractValue || symbol;
+    chatInput.value = `${target} ${frequency} ${statusText}，这个信号怎么看？`;
     chatInput.focus();
   });
 
