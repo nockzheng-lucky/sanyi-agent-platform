@@ -35,7 +35,11 @@
           <h2>实时门信号</h2>
           <p>新出现的信号会自动弹到这里</p>
         </div>
-        <span id="signalCount" class="count">0</span>
+        <div class="panel-actions">
+          <span id="signalCount" class="count">0</span>
+          <button id="soundBtn" type="button" class="mini-btn" title="新信号声音提示">声音 开</button>
+          <button id="notifyBtn" type="button" class="mini-btn" title="浏览器系统通知">通知 开</button>
+        </div>
       </div>
       <div id="signalFeed" class="signal-feed">
         <p id="signalEmpty" class="signal-empty">正在等待新信号…</p>

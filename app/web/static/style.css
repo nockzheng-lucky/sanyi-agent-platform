@@ -120,6 +120,32 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   font-weight: 700;
 }
 
+.panel-actions { display: flex; align-items: center; gap: 6px; }
+
+.mini-btn {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mini-btn.on { color: var(--accent); border-color: rgba(255,122,26,.45); }
+
+@keyframes signal-pop {
+  0% { opacity: 0; transform: translateY(-8px) scale(.97); }
+  60% { opacity: 1; transform: translateY(1px) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.signal-card.pushed {
+  animation: signal-pop .5s ease-out;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(255,122,26,.25), 0 6px 18px rgba(255,122,26,.12);
+}
+
 .signal-feed {
   flex: 1;
   min-height: 0;

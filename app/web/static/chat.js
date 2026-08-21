@@ -11,10 +11,15 @@ const loginForm = document.getElementById("loginForm");
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
 const sendBtn = document.getElementById("sendBtn");
+const soundBtn = document.getElementById("soundBtn");
+const notifyBtn = document.getElementById("notifyBtn");
 
 let history = [];
 let streaming = false;
 let signalStream = null;
+let soundEnabled = localStorage.getItem("sanyi.sound") !== "0";
+let notifyEnabled = false;
+let audioCtx = null;
 
 function showLogin() {
   loginCard.classList.remove("hidden");
@@ -29,6 +34,103 @@ function showChat(token) {
   loadLatestSignals();
   connectSignalStream();
 }
+
+function updateSoundButton() {
+  if (soundBtn) soundBtn.textContent = soundEnabled ? "声音 开" : "声音 关";
+  if (soundBtn) soundBtn.classList.toggle("on", soundEnabled);
+}
+
+function updateNotifyButton() {
+  if (!("Notification" in window)) {
+    notifyBtn.textContent = "不支持";
+    notifyBtn.disabled = true;
+    return;
+  }
+  if (Notification.permission === "denied") {
+    notifyBtn.textContent = "通知 被禁";
+    notifyBtn.classList.remove("on");
+    notifyEnabled = false;
+    return;
+  }
+  notifyBtn.textContent = notifyEnabled ? "通知 开" : "通知 关";
+  notifyBtn.classList.toggle("on", notifyEnabled);
+}
+
+function ensureAudio() {
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) audioCtx = new Ctx();
+  }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+}
+
+function playChime() {
+  if (!soundEnabled) return;
+  ensureAudio();
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  [0, 0.12].forEach((offset, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = i === 0 ? 880 : 1174.66;
+    gain.gain.setValueAtTime(0.0001, now + offset);
+    gain.gain.exponentialRampToValueAtTime(0.16, now + offset + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.18);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now + offset);
+    osc.stop(now + offset + 0.2);
+  });
+}
+
+function signalText(ev) {
+  return ev.status === "OPEN" ? "地门开" : "地门形成·无动作门上";
+}
+
+function notifySignal(ev) {
+  if (!notifyEnabled || Notification.permission !== "granted") return;
+  const status = signalText(ev);
+  const target = ev.contract || ev.symbol;
+  const title = `${target} ${ev.frequency} ${status}`;
+  const body = [
+    ev.summary,
+    ev.generatedAt || ev.generated_at || ev.barTime || ev.bar_time ? `信号时间：${ev.generatedAt || ev.generated_at || ev.barTime || ev.bar_time}` : "",
+    ev.gatePrice || ev.gate_price ? `门价 ${ev.gatePrice || ev.gate_price}` : "",
+  ].filter(Boolean).join("\n");
+  const notification = new Notification(title, { body, tag: ev.eventId || undefined });
+  notification.onclick = () => {
+    window.focus();
+    notification.close();
+  };
+}
+
+document.addEventListener("pointerdown", ensureAudio, { once: true });
+
+if (soundBtn) {
+  soundBtn.addEventListener("click", () => {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem("sanyi.sound", soundEnabled ? "1" : "0");
+    updateSoundButton();
+    if (soundEnabled) playChime();
+  });
+}
+
+if (notifyBtn) {
+  notifyBtn.addEventListener("click", async () => {
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "default") {
+      await Notification.requestPermission();
+    }
+    if (Notification.permission === "granted") {
+      notifyEnabled = !notifyEnabled;
+    }
+    updateNotifyButton();
+  });
+}
+
+updateSoundButton();
+updateNotifyButton();
 
 async function api(url, options = {}) {
   const resp = await fetch(url, {
@@ -85,8 +187,8 @@ function firstDefined(...values) {
   return null;
 }
 
-function addSignalCard(ev) {
-  const statusText = ev.status === "OPEN" ? "地门开" : "地门形成·无动作门上";
+function addSignalCard(ev, { isNew = false } = {}) {
+  const statusText = signalText(ev);
   const badgeCls = ev.status === "OPEN" ? "open" : "formation";
   const symbol = firstDefined(ev.symbol);
   const frequency = firstDefined(ev.frequency);
@@ -100,7 +202,7 @@ function addSignalCard(ev) {
   const currentPrice = firstDefined(ev.currentPrice, ev.current_price);
 
   const card = document.createElement("div");
-  card.className = "signal-card";
+  card.className = isNew ? "signal-card pushed" : "signal-card";
 
   const top = document.createElement("div");
   top.className = "s-top";
@@ -162,7 +264,10 @@ function connectSignalStream() {
   signalStream = new EventSource("/api/v1/signal-events/stream");
   signalStream.addEventListener("signal", (msg) => {
     try {
-      addSignalCard(JSON.parse(msg.data));
+      const ev = JSON.parse(msg.data);
+      addSignalCard(ev, { isNew: true });
+      playChime();
+      notifySignal(ev);
     } catch (_e) {}
   });
   signalStream.onerror = () => {
