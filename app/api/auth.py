@@ -116,6 +116,7 @@ async def me(user: dict = Depends(get_user_session)):
             "userId": user["id"],
             "phoneMasked": user["phone_masked"],
             "status": user["status"],
+            "role": user.get("role", "user"),
         },
     }
 
