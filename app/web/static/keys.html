@@ -19,8 +19,18 @@
       <h2>申请 Key</h2>
       <form id="keyForm" class="auth-form">
         <input id="keyName" placeholder="名称，例如：自己的Agent" />
-        <input id="expiresDays" type="number" placeholder="有效期天数（留空=长期）" min="1" />
-        <input id="allowIps" placeholder="IP 白名单（可选，逗号分隔）" />
+        <label class="field-label">有效期</label>
+        <select id="expiresDays">
+          <option value="">长期有效</option>
+          <option value="30">30 天</option>
+          <option value="90">90 天</option>
+          <option value="365">365 天</option>
+        </select>
+        <details class="advanced">
+          <summary>高级设置：IP 白名单（可选）</summary>
+          <p class="field-hint">只允许填写的 IP 地址使用这个 Key。普通用户留空即可；例如：1.2.3.4, 5.6.7.8</p>
+          <input id="allowIps" placeholder="留空表示不限制" />
+        </details>
         <button type="submit">申请 Key</button>
       </form>
       <p id="newKey" class="new-key hidden"></p>
@@ -28,9 +38,10 @@
     <section class="key-list">
       <h2>我的 Key</h2>
       <div id="keyList"></div>
-      <p class="hint small"><a href="/chat">进入聊天页面</a> · <a href="/subscription">订阅</a> · <a href="#" id="logoutLink">退出登录</a></p>
+      <p class="hint small">Key 明文只显示一次，请立即保存。</p>
     </section>
   </main>
   <script src="/chat/auth.js"></script>
+<script src="/chat/sidebar.js"></script>
 </body>
 </html>
