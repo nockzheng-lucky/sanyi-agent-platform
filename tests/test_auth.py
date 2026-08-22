@@ -25,9 +25,10 @@ def test_register_login_key_and_chat_flow(client):
     assert me.status_code == 200
     assert me.json()["data"]["phoneMasked"].startswith("139")
 
-    # 未申请 Key 时聊天会话返回 403 引导申请
+    # 未申请 Key 时聊天页仍可打开，但标记 needsKey 引导申请
     chat_session = client.get("/api/chat/session")
-    assert chat_session.status_code == 403
+    assert chat_session.status_code == 200
+    assert chat_session.json()["data"]["needsKey"] is True
 
     created = client.post(
         "/api/v1/keys",
