@@ -66,7 +66,10 @@ async def rotate(key_id: int, user: dict = Depends(get_user_session)):
 async def reveal(key_id: int, user: dict = Depends(get_user_session)):
     raw = reveal_user_key(user["id"], key_id)
     if raw is None:
-        raise HTTPException(status_code=404, detail={"code": 404, "message": "Key 不存在或旧 Key 不支持查看，请轮换", "data": None})
+        raise HTTPException(
+            status_code=404,
+            detail={"code": 404, "message": "这是旧版 Key，不支持回看，请撤销后重新申请", "data": None},
+        )
     return {"code": 0, "message": "ok", "data": {"token": raw}}
 
 

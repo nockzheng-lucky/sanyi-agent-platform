@@ -125,7 +125,7 @@ function initKeys() {
         }
 
         const eye = document.createElement("button");
-        eye.textContent = "👁";
+        eye.textContent = "显示";
         eye.title = "显示/隐藏 Key";
         eye.type = "button";
         eye.addEventListener("click", async () => {
@@ -133,9 +133,11 @@ function initKeys() {
             if (tokenSpan.dataset.revealed === "1") {
               tokenSpan.textContent = `${key.tokenPrefix}••••••••••••`;
               tokenSpan.dataset.revealed = "0";
+              eye.textContent = "显示";
             } else {
               tokenSpan.textContent = await revealToken();
               tokenSpan.dataset.revealed = "1";
+              eye.textContent = "隐藏";
             }
           } catch (err) { alert(err.message); }
         });
