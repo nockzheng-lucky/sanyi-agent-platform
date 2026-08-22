@@ -6,6 +6,7 @@ const signalEmptyEl = document.getElementById("signalEmpty");
 const signalCountEl = document.getElementById("signalCount");
 const loginCard = document.getElementById("loginCard");
 const chatCard = document.getElementById("chatCard");
+const needKeyBanner = document.getElementById("needKeyBanner");
 const accountEl = document.getElementById("account");
 const loginForm = document.getElementById("loginForm");
 const chatForm = document.getElementById("chatForm");
@@ -28,6 +29,7 @@ function showLogin() {
 function showChat(actor) {
   loginCard.classList.add("hidden");
   chatCard.classList.remove("hidden");
+  if (needKeyBanner) needKeyBanner.classList.toggle("hidden", !actor.needsKey);
   if (actor.user) {
     accountEl.textContent = `手机号 ${actor.user.phoneMasked}`;
   } else if (actor.token) {

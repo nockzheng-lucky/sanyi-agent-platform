@@ -1,10 +1,10 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ..accounts import get_user, user_key_sanitize
+from ..accounts import get_default_user_key, get_user, get_user_id_by_session, user_key_sanitize
 from ..agent.loop import run_agent_stream
 from ..config import COOKIE_SECURE, SYSTEM_NAME
 from ..db import authenticate, create_session, delete_session, get_token_record
@@ -44,8 +44,34 @@ def set_session_cookie(response: Response, session_raw: str, remember_hours: int
 
 
 @router.get("/session")
-async def session(actor: dict = Depends(get_actor)):
+async def session(
+    request: Request,
+    sanyi_user: Optional[str] = Cookie(default=None),
+    sanyi_session: Optional[str] = Cookie(default=None),
+):
     data: dict = {"system": SYSTEM_NAME}
+    user_id = get_user_id_by_session(sanyi_user or "")
+    if user_id is not None:
+        user = get_user(user_id)
+        if user is not None and user["status"] == "active":
+            data["user"] = {
+                "id": user["id"],
+                "phoneMasked": user["phone_masked"],
+                "status": user["status"],
+            }
+            key = get_default_user_key(user_id)
+            if key is None:
+                data["key"] = None
+                data["needsKey"] = True
+            else:
+                key["_table"] = "user_keys"
+                key["_key_id"] = key["id"]
+                key["_user_id"] = user_id
+                data["key"] = user_key_sanitize(key)
+                data["needsKey"] = False
+            return {"code": 0, "message": "ok", "data": data}
+
+    actor = await get_actor(request, sanyi_user=sanyi_user, sanyi_session=sanyi_session)
     if actor.get("_table") == "user_keys":
         user = get_user(actor["_user_id"])
         data["user"] = {

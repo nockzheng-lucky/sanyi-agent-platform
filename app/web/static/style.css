@@ -190,6 +190,15 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   min-height: 0;
 }
 
+.need-key-banner {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,122,26,.35);
+  background: rgba(255,122,26,.08);
+  color: var(--text);
+  font-size: 14px;
+}
+.need-key-banner a { color: var(--accent); }
+
 .messages {
   flex: 1;
   overflow-y: auto;
