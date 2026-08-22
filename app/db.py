@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS user_keys (
     name TEXT NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
     token_prefix TEXT NOT NULL,
+    token_encrypted TEXT,
     status TEXT NOT NULL DEFAULT 'active',
     quota_total INTEGER NOT NULL DEFAULT -1,
     quota_used INTEGER NOT NULL DEFAULT 0,
@@ -182,6 +183,9 @@ def init_db() -> None:
         conn.execute("ALTER TABLE users ADD COLUMN subscription_plan TEXT")
     if "subscription_expires_at" not in user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN subscription_expires_at TEXT")
+    key_cols = [r["name"] for r in conn.execute("PRAGMA table_info(user_keys)").fetchall()]
+    if "token_encrypted" not in key_cols:
+        conn.execute("ALTER TABLE user_keys ADD COLUMN token_encrypted TEXT")
     conn.commit()
 
 

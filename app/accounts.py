@@ -1,10 +1,13 @@
 """手机号注册/登录、短信验证码、用户会话、用户 Key 生命周期。"""
+import base64
 import hashlib
 import hmac
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
+from cryptography.fernet import Fernet, InvalidToken
 
 from .config import PHONE_HASH_SECRET, SMS_MOCK
 from .db import _now_iso, get_conn
@@ -200,6 +203,11 @@ def get_user(user_id: int) -> Optional[Dict[str, Any]]:
 # ── 用户 Key ──────────────────────────────────────────
 
 
+def _fernet() -> Fernet:
+    key_material = hashlib.sha256(("key-enc:" + PHONE_HASH_SECRET).encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(key_material))
+
+
 def _key_active(rec: Dict[str, Any]) -> bool:
     if rec.get("status") != "active":
         return False
@@ -226,14 +234,15 @@ def issue_user_key(
         expires_at = (datetime.now(timezone.utc) + timedelta(days=int(expires_in_days))).isoformat()
     conn = get_conn()
     cur = conn.execute(
-        "INSERT INTO user_keys(user_id, name, token_hash, token_prefix, status,"
-        " quota_total, rate_limit_per_min, allow_ips, expires_at, created_at)"
-        " VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)",
+        "INSERT INTO user_keys(user_id, name, token_hash, token_prefix, token_encrypted,"
+        " status, quota_total, rate_limit_per_min, allow_ips, expires_at, created_at)"
+        " VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)",
         (
             user_id,
             name,
             hashlib.sha256(raw.encode("utf-8")).hexdigest(),
             raw[:16],
+            _fernet().encrypt(raw.encode("utf-8")).decode("ascii"),
             quota_total,
             rate_limit_per_min,
             allow_ips,
@@ -284,9 +293,17 @@ def revoke_user_key(user_id: int, key_id: int) -> bool:
 
 
 def reveal_user_key(user_id: int, key_id: int) -> Optional[str]:
-    """管理页需要重新查看 Key 时，从新的一次性恢复表中取；这里 MVP 返回 None，
-    实际产品不建议明文可回看，请用轮换替代。"""
-    return None
+    """用户本人点击眼睛时解密返回 Key 明文。Key 加密存储，默认列表只显示掩码。"""
+    key = get_user_key(user_id, key_id)
+    if key is None:
+        return None
+    encrypted = key.get("token_encrypted")
+    if not encrypted:
+        return None
+    try:
+        return _fernet().decrypt(encrypted.encode("ascii")).decode("utf-8")
+    except InvalidToken:
+        return None
 
 
 def rotate_user_key(user_id: int, key_id: int, name: str = "") -> Optional[Dict[str, Any]]:

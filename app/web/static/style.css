@@ -269,6 +269,7 @@ select { width: 100%; background: var(--panel2); border: 1px solid var(--border)
 .key-row small { color: var(--muted); font-size: 12px; }
 .key-actions { display: flex; gap: 6px; }
 .key-actions button { padding: 7px 10px; font-size: 12px; }
+.key-token { display: inline-block; margin-top: 6px; font-size: 13px; color: var(--green); word-break: break-all; }
 
 .legal-card { max-width: 720px; margin: 5vh auto 0; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 28px; line-height: 1.8; }
 .legal-card h2 { margin: 18px 0 6px; font-size: 16px; }

@@ -106,19 +106,64 @@ function initKeys() {
       for (const key of data.keys) {
         const row = document.createElement("div");
         row.className = "key-row";
+
         const info = document.createElement("div");
-        info.innerHTML = `<strong>${key.name}</strong> · <span>${key.tokenPrefix}…</span><br>` +
-          `<small>状态：${key.status} · 有效期：${key.expiresAt || "长期"} · 额度：${key.quotaUsed}/${key.quotaTotal === -1 ? "不限" : key.quotaTotal}</small>`;
+        const tokenSpan = document.createElement("code");
+        tokenSpan.className = "key-token";
+        tokenSpan.textContent = `${key.tokenPrefix}••••••••••••`;
+        tokenSpan.dataset.revealed = "0";
+        info.innerHTML = `<strong>${key.name}</strong><br>` +
+          `<small>状态：${key.status} · 有效期：${key.expiresAt || "长期"}</small>`;
+        info.appendChild(tokenSpan);
+
         const actions = document.createElement("div");
         actions.className = "key-actions";
+
+        async function revealToken() {
+          const data = await api(`/api/v1/keys/${key.id}/reveal`, { method: "POST", body: "{}" });
+          return data.token;
+        }
+
+        const eye = document.createElement("button");
+        eye.textContent = "👁";
+        eye.title = "显示/隐藏 Key";
+        eye.type = "button";
+        eye.addEventListener("click", async () => {
+          try {
+            if (tokenSpan.dataset.revealed === "1") {
+              tokenSpan.textContent = `${key.tokenPrefix}••••••••••••`;
+              tokenSpan.dataset.revealed = "0";
+            } else {
+              tokenSpan.textContent = await revealToken();
+              tokenSpan.dataset.revealed = "1";
+            }
+          } catch (err) { alert(err.message); }
+        });
+
+        const copy = document.createElement("button");
+        copy.textContent = "复制";
+        copy.title = "复制 Key";
+        copy.type = "button";
+        copy.addEventListener("click", async () => {
+          try {
+            const raw = tokenSpan.dataset.revealed === "1" ? tokenSpan.textContent : await revealToken();
+            await navigator.clipboard.writeText(raw);
+            tokenSpan.textContent = raw;
+            tokenSpan.dataset.revealed = "1";
+          } catch (err) { alert(err.message || "复制失败，请手动选择后复制"); }
+        });
+
+        actions.appendChild(eye);
+        actions.appendChild(copy);
+
         if (key.status === "active") {
           const rotate = document.createElement("button");
           rotate.textContent = "轮换";
           rotate.type = "button";
           rotate.addEventListener("click", async () => {
             try {
-              const created = await api(`/api/v1/keys/${key.id}/rotate`, { method: "POST", body: "{}" });
-              showNewKey(created);
+              await api(`/api/v1/keys/${key.id}/rotate`, { method: "POST", body: "{}" });
+              showNewKey();
               await refresh();
             } catch (err) { alert(err.message); }
           });
@@ -148,16 +193,16 @@ function initKeys() {
     }
   }
 
-  function showNewKey(created) {
+  function showNewKey() {
     const box = document.getElementById("newKey");
     box.classList.remove("hidden");
-    box.textContent = `新 Key（只显示一次，请立即保存）：${created.token}`;
+    box.textContent = "Key 已创建，默认隐藏。可在下方列表点击眼睛查看，或点击复制。";
   }
 
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     try {
-      const created = await api("/api/v1/keys", {
+      await api("/api/v1/keys", {
         method: "POST",
         body: JSON.stringify({
           name: document.getElementById("keyName").value.trim(),
@@ -165,7 +210,7 @@ function initKeys() {
           allowIps: document.getElementById("allowIps").value.trim(),
         }),
       });
-      showNewKey(created);
+      showNewKey();
       await refresh();
     } catch (err) { alert(err.message); }
   });

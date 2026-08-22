@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from ..accounts import (
     issue_user_key,
     list_user_keys,
+    reveal_user_key,
     revoke_user_key,
     rotate_user_key,
     user_key_sanitize,
@@ -63,11 +64,10 @@ async def rotate(key_id: int, user: dict = Depends(get_user_session)):
 
 @router.post("/{key_id}/reveal")
 async def reveal(key_id: int, user: dict = Depends(get_user_session)):
-    # 明文只显示一次；遗失请轮换。
-    raise HTTPException(
-        status_code=404,
-        detail={"code": 404, "message": "Key 明文只显示一次，遗失请使用轮换", "data": None},
-    )
+    raw = reveal_user_key(user["id"], key_id)
+    if raw is None:
+        raise HTTPException(status_code=404, detail={"code": 404, "message": "Key 不存在或旧 Key 不支持查看，请轮换", "data": None})
+    return {"code": 0, "message": "ok", "data": {"token": raw}}
 
 
 @router.get("/{key_id}/usage")

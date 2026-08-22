@@ -41,6 +41,10 @@ def test_register_login_key_and_chat_flow(client):
     assert keys.status_code == 200
     assert len(keys.json()["data"]["keys"]) == 1
 
+    reveal = client.post(f"/api/v1/keys/{created.json()['data']['id']}/reveal", json={})
+    assert reveal.status_code == 200
+    assert reveal.json()["data"]["token"] == token
+
     # 有 Key 后聊天会话可用
     chat_session = client.get("/api/chat/session")
     assert chat_session.status_code == 200
