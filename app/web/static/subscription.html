@@ -14,16 +14,14 @@
   <main class="auth-card">
     <h2>我的订阅</h2>
     <p id="status" class="hint"></p>
-    <h2>申请开通</h2>
-    <form id="subForm" class="auth-form">
-      <select id="plan"><option value="monthly">月费版 · ¥99 / 30天（占位价格）</option></select>
-      <input id="paymentNote" placeholder="支付备注（例如：已微信转账，订单号xxx）" />
-      <button type="submit">提交支付确认申请</button>
+
+    <h2>礼品卡兑换</h2>
+    <form id="giftForm" class="auth-form">
+      <input id="giftCode" placeholder="输入礼品卡代码" autocomplete="off" />
+      <button type="submit">兑换</button>
     </form>
-    <p id="formError" class="form-error"></p>
-    <h2>我的申请</h2>
-    <div id="requestList"></div>
-    <p class="hint small"><a href="/keys">返回 Key 管理</a></p>
+    <p id="giftError" class="form-error"></p>
+    <p class="hint small">当前为 MOCK 测试代码：MOCK30（30天）、MOCK90（90天）、MOCK365（365天）。时长可累加。</p>
   </main>
   <script src="/chat/subscription.js"></script>
 <script src="/chat/sidebar.js"></script>

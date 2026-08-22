@@ -381,6 +381,52 @@ PLANS = {
     "monthly": {"name": "月费版", "amount_cents": 9900, "period_days": 30},
 }
 
+# MOCK 礼品卡代码：真实礼品卡生成上线前用于测试。
+MOCK_GIFT_CODES = {
+    "MOCK30": 30,
+    "MOCK90": 90,
+    "MOCK365": 365,
+}
+
+
+def redeem_gift_code(user: Dict[str, Any], code: str) -> Dict[str, Any]:
+    """兑换礼品卡代码。当前 MOCK 阶段只接受固定测试代码，天数从到期日继续累加。"""
+    code = (code or "").strip().upper()
+    days = MOCK_GIFT_CODES.get(code)
+    if days is None:
+        raise ValueError("礼品卡代码无效")
+    now = datetime.now(timezone.utc)
+    current = user.get("subscription_expires_at")
+    base = None
+    if current:
+        try:
+            parsed = datetime.fromisoformat(current)
+            if parsed > now:
+                base = parsed
+        except ValueError:
+            base = None
+    base = base or now
+    new_expires = base + timedelta(days=days)
+    conn = get_conn()
+    conn.execute(
+        "UPDATE users SET subscription_plan = 'gift', subscription_expires_at = ? WHERE id = ?",
+        (new_expires.isoformat(), user["id"]),
+    )
+    conn.execute(
+        "INSERT INTO gift_card_redemptions(user_id, code_hash, plan, period_days,"
+        " expires_before, expires_after, redeemed_at) VALUES (?, ?, 'gift', ?, ?, ?, ?)",
+        (
+            user["id"],
+            hashlib.sha256(code.encode("utf-8")).hexdigest(),
+            days,
+            base.isoformat(),
+            new_expires.isoformat(),
+            _now_iso(),
+        ),
+    )
+    conn.commit()
+    return {"plan": "gift", "periodDays": days, "expiresAt": new_expires.isoformat()}
+
 
 def is_subscription_active(user: Dict[str, Any]) -> bool:
     from .config import SUBSCRIPTION_REQUIRED

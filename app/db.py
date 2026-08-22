@@ -90,6 +90,17 @@ CREATE TABLE IF NOT EXISTS subscription_requests (
     paid_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS gift_card_redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    code_hash TEXT NOT NULL,
+    plan TEXT NOT NULL,
+    period_days INTEGER NOT NULL,
+    expires_before TEXT,
+    expires_after TEXT,
+    redeemed_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS user_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

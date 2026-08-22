@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..accounts import (
+    MOCK_GIFT_CODES,
     PLANS,
     create_subscription_request,
     is_subscription_active,
     list_my_subscription_requests,
+    redeem_gift_code,
 )
 from ..security import get_user_session
 
@@ -15,6 +17,10 @@ router = APIRouter(prefix="/api/v1/subscription", tags=["subscription"])
 class SubscriptionApplyRequest(BaseModel):
     plan: str = "monthly"
     paymentNote: str = ""
+
+
+class GiftCardRedeemRequest(BaseModel):
+    code: str
 
 
 @router.get("")
@@ -27,7 +33,21 @@ async def subscription(user: dict = Depends(get_user_session)):
             "plan": user.get("subscription_plan"),
             "expiresAt": user.get("subscription_expires_at"),
             "plans": PLANS,
+            "mockGiftCodes": MOCK_GIFT_CODES,
         },
+    }
+
+
+@router.post("/redeem")
+async def redeem(payload: GiftCardRedeemRequest, user: dict = Depends(get_user_session)):
+    try:
+        result = redeem_gift_code(user, payload.code)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": 422, "message": str(exc), "data": None})
+    return {
+        "code": 0,
+        "message": "兑换成功，订阅时长已累加",
+        "data": result,
     }
 
 

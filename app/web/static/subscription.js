@@ -11,46 +11,46 @@ async function api(url, options = {}) {
   return body.data;
 }
 
+function showToast(message) {
+  let toast = document.getElementById("toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast";
+    toast.className = "toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => toast.classList.remove("show"), 1800);
+}
+
 async function refresh() {
   const sub = await api("/api/v1/subscription");
   const status = document.getElementById("status");
-  status.textContent = sub.active
-    ? `当前权益：${sub.plan || "已开通"}，到期 ${sub.expiresAt || "长期"}`
-    : "当前权益：未开通或已到期";
-
-  const reqs = await api("/api/v1/subscription/requests");
-  const list = document.getElementById("requestList");
-  list.textContent = "";
-  if (!reqs.requests.length) {
-    list.innerHTML = '<p class="hint">暂无申请</p>';
-    return;
-  }
-  for (const r of reqs.requests) {
-    const div = document.createElement("div");
-    div.className = "key-row";
-    div.innerHTML = `<div><strong>${r.plan}</strong> · ¥${(r.amount_cents / 100).toFixed(2)} / ${r.period_days}天<br><small>状态：${r.status} · 提交：${r.created_at}</small></div>`;
-    list.appendChild(div);
-  }
+  status.textContent = sub.expiresAt
+    ? `当前权益：${sub.plan || "已开通"}，到期 ${String(sub.expiresAt).replace("T", " ").slice(0, 19)}`
+    : "当前权益：未开通";
 }
 
-document.getElementById("subForm").addEventListener("submit", async (ev) => {
+document.getElementById("giftForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
+  const error = document.getElementById("giftError");
+  error.textContent = "";
   try {
-    await api("/api/v1/subscription/requests", {
+    const result = await api("/api/v1/subscription/redeem", {
       method: "POST",
-      body: JSON.stringify({
-        plan: document.getElementById("plan").value,
-        paymentNote: document.getElementById("paymentNote").value.trim(),
-      }),
+      body: JSON.stringify({ code: document.getElementById("giftCode").value.trim() }),
     });
-    document.getElementById("formError").textContent = "申请已提交，等待管理员确认";
-    refresh();
+    showToast(`兑换成功，增加 ${result.periodDays} 天`);
+    document.getElementById("giftCode").value = "";
+    await refresh();
   } catch (err) {
-    document.getElementById("formError").textContent = err.message;
+    error.textContent = err.message;
   }
 });
 
 refresh().catch((err) => {
   if (err.message.includes("401")) window.location.href = "/login";
-  else document.getElementById("formError").textContent = err.message;
+  else document.getElementById("giftError").textContent = err.message;
 });
