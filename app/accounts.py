@@ -262,8 +262,12 @@ def issue_user_key(
 
 
 def list_user_keys(user_id: int) -> List[Dict[str, Any]]:
+    """用户自己的 Key 列表：只返回 active，删除后从列表消失。"""
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM user_keys WHERE user_id = ? ORDER BY id DESC", (user_id,)).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM user_keys WHERE user_id = ? AND status = 'active' ORDER BY id DESC",
+        (user_id,),
+    ).fetchall()
     return [dict(r) for r in rows]
 
 

@@ -63,6 +63,8 @@ def test_register_login_key_and_chat_flow(client):
     key_id = keys.json()["data"]["keys"][0]["id"]
     revoke = client.post(f"/api/v1/keys/{key_id}/revoke", json={})
     assert revoke.status_code == 200
+    keys_after = client.get("/api/v1/keys").json()["data"]["keys"]
+    assert keys_after == []
     resp = client.get("/api/v1/factors", headers={"X-API-Token": token})
     assert resp.status_code == 401
 
