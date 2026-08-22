@@ -237,6 +237,8 @@ textarea { resize: none; min-height: 44px; max-height: 160px; }
   padding: 26px;
 }
 
+.keys-card { width: min(680px, 100%); }
+
 .auth-card h2, .keys-card h2 { margin-bottom: 14px; }
 .auth-form { display: flex; flex-direction: column; gap: 10px; }
 select { width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); padding: 12px 14px; font-size: 15px; outline: none; }
@@ -260,16 +262,27 @@ select { width: 100%; background: var(--panel2); border: 1px solid var(--border)
   font-size: 13px;
   word-break: break-all;
 }
-.key-list { display: flex; flex-direction: column; gap: 8px; }
+.key-list { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .key-row {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
   background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
   font-size: 14px;
+  width: 100%;
+  min-width: 0;
 }
+.key-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
 .key-row small { color: var(--muted); font-size: 12px; }
 .key-actions { display: flex; gap: 6px; }
 .key-actions button { padding: 7px 10px; font-size: 12px; }
 .key-token { display: inline-block; margin-top: 6px; font-size: 13px; color: var(--green); word-break: break-all; }
+.toast {
+  position: fixed; right: 24px; bottom: 24px; z-index: 99;
+  background: var(--panel2); color: var(--text);
+  border: 1px solid rgba(51,209,122,.45); border-radius: 10px;
+  padding: 10px 14px; font-size: 14px; opacity: 0; pointer-events: none;
+  transform: translateY(8px); transition: opacity .2s ease, transform .2s ease;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
 
 .legal-card { max-width: 720px; margin: 5vh auto 0; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 28px; line-height: 1.8; }
 .legal-card h2 { margin: 18px 0 6px; font-size: 16px; }

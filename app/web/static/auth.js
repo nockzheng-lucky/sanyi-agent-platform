@@ -17,6 +17,20 @@ function setError(el, message) {
   if (el) el.textContent = message || "";
 }
 
+function showToast(message) {
+  let toast = document.getElementById("toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast";
+    toast.className = "toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => toast.classList.remove("show"), 1600);
+}
+
 function initLogin() {
   const form = document.getElementById("loginForm");
   if (!form) return;
@@ -152,6 +166,7 @@ function initKeys() {
             await navigator.clipboard.writeText(raw);
             tokenSpan.textContent = raw;
             tokenSpan.dataset.revealed = "1";
+            showToast("已复制");
           } catch (err) { alert(err.message || "复制失败，请手动选择后复制"); }
         });
 
@@ -159,28 +174,18 @@ function initKeys() {
         actions.appendChild(copy);
 
         if (key.status === "active") {
-          const rotate = document.createElement("button");
-          rotate.textContent = "轮换";
-          rotate.type = "button";
-          rotate.addEventListener("click", async () => {
-            try {
-              await api(`/api/v1/keys/${key.id}/rotate`, { method: "POST", body: "{}" });
-              showNewKey();
-              await refresh();
-            } catch (err) { alert(err.message); }
-          });
-          const revoke = document.createElement("button");
-          revoke.textContent = "撤销";
-          revoke.type = "button";
-          revoke.addEventListener("click", async () => {
-            if (!confirm(`确定撤销 Key「${key.name}」？撤销后立即失效。`)) return;
+          const del = document.createElement("button");
+          del.textContent = "删除";
+          del.type = "button";
+          del.addEventListener("click", async () => {
+            if (!confirm(`确定删除 Key「${key.name}」？删除后立即失效。`)) return;
             try {
               await api(`/api/v1/keys/${key.id}/revoke`, { method: "POST", body: "{}" });
+              showToast("已删除");
               await refresh();
             } catch (err) { alert(err.message); }
           });
-          actions.appendChild(rotate);
-          actions.appendChild(revoke);
+          actions.appendChild(del);
         }
         row.appendChild(info);
         row.appendChild(actions);
