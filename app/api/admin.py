@@ -2,8 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..accounts import (
+    confirm_subscription_request,
     list_all_keys,
+    list_all_subscription_requests,
     list_users_summary,
+    reject_subscription_request,
     revoke_any_user_key,
     set_user_status,
     set_user_role,
@@ -21,6 +24,14 @@ class UserStatusRequest(BaseModel):
 
 class UserRoleRequest(BaseModel):
     role: str
+
+
+class SubscriptionConfirmRequest(BaseModel):
+    note: str = ""
+
+
+class SubscriptionRejectRequest(BaseModel):
+    note: str = ""
 
 
 @router.get("/users")
@@ -55,6 +66,25 @@ async def revoke_key(key_id: int, admin: dict = Depends(require_admin_user)):
     if not revoke_any_user_key(key_id):
         raise HTTPException(status_code=404, detail={"code": 404, "message": "Key 不存在", "data": None})
     return {"code": 0, "message": "ok", "data": None}
+
+
+@router.get("/subscription-requests")
+async def subscription_requests(admin: dict = Depends(require_admin_user)):
+    return {"code": 0, "message": "ok", "data": {"requests": list_all_subscription_requests()}}
+
+
+@router.post("/subscription-requests/{request_id}/confirm")
+async def confirm_subscription(request_id: int, payload: SubscriptionConfirmRequest, admin: dict = Depends(require_admin_user)):
+    if not confirm_subscription_request(request_id, admin["id"], payload.note):
+        raise HTTPException(status_code=404, detail={"code": 404, "message": "申请不存在或已处理", "data": None})
+    return {"code": 0, "message": "已确认收款，权益已开启", "data": None}
+
+
+@router.post("/subscription-requests/{request_id}/reject")
+async def reject_subscription(request_id: int, payload: SubscriptionRejectRequest, admin: dict = Depends(require_admin_user)):
+    if not reject_subscription_request(request_id, admin["id"], payload.note):
+        raise HTTPException(status_code=404, detail={"code": 404, "message": "申请不存在或已处理", "data": None})
+    return {"code": 0, "message": "已驳回", "data": None}
 
 
 @router.get("/usage")

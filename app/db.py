@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS users (
     status TEXT NOT NULL DEFAULT 'active',
     role TEXT NOT NULL DEFAULT 'user',
     agreement_version TEXT,
+    subscription_plan TEXT,
+    subscription_expires_at TEXT,
     created_at TEXT NOT NULL,
     last_login_at TEXT
 );
@@ -72,6 +74,20 @@ CREATE TABLE IF NOT EXISTS sms_codes (
     attempts INTEGER NOT NULL DEFAULT 0,
     verified INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS subscription_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    plan TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL DEFAULT 0,
+    period_days INTEGER NOT NULL DEFAULT 30,
+    status TEXT NOT NULL DEFAULT 'pending_payment',
+    payment_note TEXT,
+    admin_note TEXT,
+    admin_user_id INTEGER,
+    created_at TEXT NOT NULL,
+    paid_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS user_keys (
@@ -162,6 +178,10 @@ def init_db() -> None:
     user_cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
     if "role" not in user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+    if "subscription_plan" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN subscription_plan TEXT")
+    if "subscription_expires_at" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN subscription_expires_at TEXT")
     conn.commit()
 
 

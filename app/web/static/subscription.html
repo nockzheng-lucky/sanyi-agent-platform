@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>订阅 · 三易引擎</title>
+  <link rel="stylesheet" href="/chat/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">三易</span><div><h1>订阅</h1><p class="subtitle">支付确认 + 权益开启</p></div></div>
+    <div class="topnav"><a href="/chat">聊天</a><a href="/keys">Key</a><span id="account" class="account"></span></div>
+  </header>
+  <main class="auth-card">
+    <h2>我的订阅</h2>
+    <p id="status" class="hint"></p>
+    <h2>申请开通</h2>
+    <form id="subForm" class="auth-form">
+      <select id="plan"><option value="monthly">月费版 · ¥99 / 30天（占位价格）</option></select>
+      <input id="paymentNote" placeholder="支付备注（例如：已微信转账，订单号xxx）" />
+      <button type="submit">提交支付确认申请</button>
+    </form>
+    <p id="formError" class="form-error"></p>
+    <h2>我的申请</h2>
+    <div id="requestList"></div>
+    <p class="hint small"><a href="/keys">返回 Key 管理</a></p>
+  </main>
+  <script src="/chat/subscription.js"></script>
+</body>
+</html>

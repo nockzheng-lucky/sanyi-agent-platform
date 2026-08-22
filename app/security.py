@@ -10,7 +10,13 @@ from typing import Deque, Dict, Optional, Tuple
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 
-from .accounts import authenticate_user_key, get_default_user_key, get_user, get_user_id_by_session
+from .accounts import (
+    authenticate_user_key,
+    get_default_user_key,
+    get_user,
+    get_user_id_by_session,
+    is_subscription_active,
+)
 from .config import TOKEN_RATE_LIMIT_PER_MIN
 from .db import authenticate, get_session_token_id
 
@@ -142,6 +148,11 @@ async def get_actor(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"code": 403, "message": "请先申请一个 Key", "data": None},
+            )
+        if not is_subscription_active(user):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={"code": 402, "message": "订阅未开通或已到期，请先申请开通", "data": None},
             )
         key["_table"] = "user_keys"
         key["_key_id"] = key["id"]

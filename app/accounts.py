@@ -353,6 +353,96 @@ def user_key_sanitize(rec: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+# ── 订阅（支付确认 + 权益开启）───────────────────────────
+
+
+PLANS = {
+    "monthly": {"name": "月费版", "amount_cents": 9900, "period_days": 30},
+}
+
+
+def is_subscription_active(user: Dict[str, Any]) -> bool:
+    from .config import SUBSCRIPTION_REQUIRED
+
+    if not SUBSCRIPTION_REQUIRED:
+        return True
+    expires = user.get("subscription_expires_at")
+    if not expires:
+        return False
+    try:
+        return datetime.fromisoformat(expires) > datetime.now(timezone.utc)
+    except ValueError:
+        return False
+
+
+def create_subscription_request(user_id: int, plan: str, payment_note: str = "") -> Dict[str, Any]:
+    plan_info = PLANS.get(plan)
+    if plan_info is None:
+        raise ValueError("未知订阅方案")
+    conn = get_conn()
+    cur = conn.execute(
+        "INSERT INTO subscription_requests(user_id, plan, amount_cents, period_days,"
+        " status, payment_note, created_at) VALUES (?, ?, ?, ?, 'pending_payment', ?, ?)",
+        (user_id, plan, plan_info["amount_cents"], plan_info["period_days"], payment_note[:500], _now_iso()),
+    )
+    conn.commit()
+    return {"id": cur.lastrowid, "plan": plan_info["name"], "amountCents": plan_info["amount_cents"], "periodDays": plan_info["period_days"]}
+
+
+def list_my_subscription_requests(user_id: int) -> List[Dict[str, Any]]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscription_requests WHERE user_id = ? ORDER BY id DESC LIMIT 20",
+        (user_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_all_subscription_requests() -> List[Dict[str, Any]]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT s.*, u.phone_masked FROM subscription_requests s"
+        " JOIN users u ON u.id = s.user_id ORDER BY s.id DESC LIMIT 100"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def confirm_subscription_request(request_id: int, admin_user_id: int, note: str = "") -> bool:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM subscription_requests WHERE id = ?", (request_id,)
+    ).fetchone()
+    if row is None:
+        return False
+    rec = dict(row)
+    if rec["status"] not in ("pending_payment",):
+        return False
+    now = datetime.now(timezone.utc)
+    new_expires = now + timedelta(days=int(rec["period_days"] or 30))
+    conn.execute(
+        "UPDATE subscription_requests SET status = 'paid', paid_at = ?, admin_user_id = ?,"
+        " admin_note = ? WHERE id = ?",
+        (_now_iso(), admin_user_id, note[:500], request_id),
+    )
+    conn.execute(
+        "UPDATE users SET subscription_plan = ?, subscription_expires_at = ? WHERE id = ?",
+        (rec["plan"], new_expires.isoformat(), rec["user_id"]),
+    )
+    conn.commit()
+    return True
+
+
+def reject_subscription_request(request_id: int, admin_user_id: int, note: str = "") -> bool:
+    conn = get_conn()
+    cur = conn.execute(
+        "UPDATE subscription_requests SET status = 'rejected', admin_user_id = ?,"
+        " admin_note = ? WHERE id = ? AND status = 'pending_payment'",
+        (admin_user_id, note[:500], request_id),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
 # ── 管理端 ──────────────────────────────────────────────
 
 

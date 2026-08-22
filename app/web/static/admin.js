@@ -71,6 +71,31 @@ async function refresh() {
     ));
   }
 
+  const subs = await api("/api/v1/admin/subscription-requests");
+  const subList = document.getElementById("subList");
+  subList.textContent = "";
+  if (!subs.requests.length) {
+    subList.innerHTML = '<p class="hint">暂无待确认申请</p>';
+  }
+  for (const r of subs.requests) {
+    const actions = [];
+    if (r.status === "pending_payment") {
+      actions.push(button("确认收款", async () => {
+        if (!confirm(`确认收到 ${r.phone_masked} 的 ${r.plan} 款项？确认后自动开启权益。`)) return;
+        await api(`/api/v1/admin/subscription-requests/${r.id}/confirm`, { method: "POST", body: JSON.stringify({ note: "线下确认" }) });
+        refresh();
+      }));
+      actions.push(button("驳回", async () => {
+        await api(`/api/v1/admin/subscription-requests/${r.id}/reject`, { method: "POST", body: JSON.stringify({ note: "驳回" }) });
+        refresh();
+      }));
+    }
+    subList.appendChild(row(
+      `<strong>${r.phone_masked}</strong> · ${r.plan} · ¥${(r.amount_cents / 100).toFixed(2)} / ${r.period_days}天<br><small>${r.status} · ${r.payment_note || ""} · ${r.created_at}</small>`,
+      actions
+    ));
+  }
+
   const usage = await api("/api/v1/admin/usage");
   const usageList = document.getElementById("usageList");
   usageList.textContent = "";

@@ -52,6 +52,9 @@ PHONE_HASH_SECRET = _phone_hash_secret()
 # 短信：MOCK=true 时验证码直接在返回的 debugCode 里（仅本地/内测）。
 SMS_MOCK = _bool("SANYI_SMS_MOCK", True)
 
+# 订阅门槛：当前 false（MVP 不拦截）。接支付后改 true，未开通订阅的用户不可用因子。
+SUBSCRIPTION_REQUIRED = _bool("SANYI_SUBSCRIPTION_REQUIRED", False)
+
 # 令牌
 TOKEN_RATE_LIMIT_PER_MIN = _int("SANYI_TOKEN_RATE_LIMIT_PER_MIN", 60)
 ENABLE_TOKEN_ISSUE_API = _bool("SANYI_ENABLE_TOKEN_ISSUE_API", False)

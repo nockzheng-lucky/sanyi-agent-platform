@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import admin, auth, chat, factors, health, keys, signals, tokens
+from .api import admin, auth, chat, factors, health, keys, signals, subscription, tokens
 from .config import SIGNAL_POLL_ENABLED, SYSTEM_NAME
 from .db import authenticate, create_session, init_db
 from .engine.poller import SignalPoller
@@ -48,6 +48,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(keys.router)
+app.include_router(subscription.router)
 app.include_router(factors.router)
 app.include_router(signals.router)
 app.include_router(tokens.router)
@@ -90,6 +91,11 @@ async def agreement_page():
 @app.get("/privacy", include_in_schema=False)
 async def privacy_page():
     return FileResponse(_web_dir / "privacy.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/subscription", include_in_schema=False)
+async def subscription_page():
+    return FileResponse(_web_dir / "subscription.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/chat", include_in_schema=False)
