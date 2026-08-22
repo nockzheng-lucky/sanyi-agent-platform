@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>管理后台 · 三易引擎</title>
+  <link rel="stylesheet" href="/chat/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">三易</span><div><h1>管理后台</h1><p class="subtitle">用户 / Key / 用量</p></div></div>
+    <div class="topnav"><a href="/chat">聊天</a><a href="/keys">Key</a><span id="account" class="account"></span></div>
+  </header>
+  <main class="admin-card">
+    <section>
+      <h2>用户</h2>
+      <div id="userList"></div>
+    </section>
+    <section>
+      <h2>全部 Key</h2>
+      <div id="keyList"></div>
+    </section>
+    <section>
+      <h2>最近用量</h2>
+      <div id="usageList"></div>
+    </section>
+  </main>
+  <script src="/chat/admin.js"></script>
+</body>
+</html>

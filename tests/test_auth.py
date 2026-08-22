@@ -63,6 +63,28 @@ def test_register_login_key_and_chat_flow(client):
     assert resp.status_code == 401
 
 
+def test_admin_flow(client):
+    from app.accounts import find_user_by_phone, set_user_role
+
+    phone = _phone()
+    code = _send_code(client, phone)
+    client.post(
+        "/api/v1/auth/register",
+        json={"phone": phone, "code": code, "password": "password123", "agree": True},
+    )
+    user = find_user_by_phone(phone)
+    set_user_role(user["id"], "admin")
+
+    resp = client.get("/api/v1/admin/users")
+    assert resp.status_code == 200
+    assert len(resp.json()["data"]["users"]) >= 1
+
+    client.post("/api/v1/keys", json={"name": "admin-sees-me"})
+    keys = client.get("/api/v1/admin/keys")
+    assert keys.status_code == 200
+    assert any(k["name"] == "admin-sees-me" for k in keys.json()["data"]["keys"])
+
+
 def test_login_wrong_password(client):
     phone = _phone()
     code = _send_code(client, phone)

@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import auth, chat, factors, health, keys, signals, tokens
+from .api import admin, auth, chat, factors, health, keys, signals, tokens
 from .config import SIGNAL_POLL_ENABLED, SYSTEM_NAME
 from .db import authenticate, create_session, init_db
 from .engine.poller import SignalPoller
@@ -46,6 +46,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(keys.router)
 app.include_router(factors.router)
 app.include_router(signals.router)
@@ -74,6 +75,21 @@ async def register_page():
 @app.get("/keys", include_in_schema=False)
 async def keys_page():
     return FileResponse(_web_dir / "keys.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/admin", include_in_schema=False)
+async def admin_page():
+    return FileResponse(_web_dir / "admin.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/agreement", include_in_schema=False)
+async def agreement_page():
+    return FileResponse(_web_dir / "agreement.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/privacy", include_in_schema=False)
+async def privacy_page():
+    return FileResponse(_web_dir / "privacy.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/chat", include_in_schema=False)

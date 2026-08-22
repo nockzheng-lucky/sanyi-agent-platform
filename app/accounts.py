@@ -351,3 +351,51 @@ def user_key_sanitize(rec: Dict[str, Any]) -> Dict[str, Any]:
         "lastUsedAt": rec.get("last_used_at"),
         "createdAt": rec.get("created_at"),
     }
+
+
+# ── 管理端 ──────────────────────────────────────────────
+
+
+def set_user_status(user_id: int, status: str) -> bool:
+    if status not in ("active", "disabled"):
+        return False
+    conn = get_conn()
+    cur = conn.execute("UPDATE users SET status = ? WHERE id = ?", (status, user_id))
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def set_user_role(user_id: int, role: str) -> bool:
+    if role not in ("user", "admin"):
+        return False
+    conn = get_conn()
+    cur = conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def list_users_summary() -> List[Dict[str, Any]]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT u.id, u.phone_masked, u.status, u.role, u.agreement_version,"
+        " u.created_at, u.last_login_at, COUNT(k.id) AS key_count"
+        " FROM users u LEFT JOIN user_keys k ON k.user_id = u.id"
+        " GROUP BY u.id ORDER BY u.id DESC LIMIT 200"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_all_keys() -> List[Dict[str, Any]]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT k.*, u.phone_masked FROM user_keys k JOIN users u ON u.id = k.user_id"
+        " ORDER BY k.id DESC LIMIT 200"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def revoke_any_user_key(key_id: int) -> bool:
+    conn = get_conn()
+    cur = conn.execute("UPDATE user_keys SET status = 'revoked' WHERE id = ?", (key_id,))
+    conn.commit()
+    return cur.rowcount == 1

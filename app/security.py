@@ -105,6 +105,16 @@ async def get_user_session(
     return user
 
 
+async def require_admin_user(user: dict = Depends(get_user_session)) -> dict:
+    """管理端：必须是 admin 角色的登录用户。"""
+    if user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": 403, "message": "需要管理员权限", "data": None},
+        )
+    return user
+
+
 async def get_actor(
     request: Request,
     sanyi_user: Optional[str] = Cookie(default=None),

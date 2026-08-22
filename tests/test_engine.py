@@ -1,7 +1,7 @@
 import asyncio
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.engine.gate_reader import read_signals
 from app.engine.poller import SignalPoller
@@ -97,18 +97,26 @@ def test_gate_reader_filters_today_sql_events(tmp_path):
 
 
 def test_poller_dedupes_by_event_id(tmp_path):
+    import uuid
+
+    uid = uuid.uuid4().hex[:8]
+    open_id = "open-" + uid
+    formation_id = "formation-" + uid
+    now = datetime.now()
+    open_at = (now - timedelta(hours=2)).isoformat(timespec="seconds")
+    formation_at = (now - timedelta(hours=1)).isoformat(timespec="seconds")
     path, conn = _create_db(tmp_path)
     conn.execute(
         "INSERT INTO gate_event(event_id,event_kind,event_at,payload_json)"
         " VALUES (?,?,?,?)",
-        ("today-open", "first-action", "2026-08-20T22:05:00",
+        (open_id, "first-action", open_at,
          _payload(first_action="open", formation="门下", text="5m 地门 沪金 已开")),
     )
     conn.commit()
 
     poller = SignalPoller(path=path, interval_seconds=1, sessions="")
     first = asyncio.run(poller.scan_once())
-    assert [e["event_id"] for e in first] == ["today-open"]
+    assert [e["event_id"] for e in first] == [open_id]
 
     second = asyncio.run(poller.scan_once())
     assert second == []
@@ -116,9 +124,9 @@ def test_poller_dedupes_by_event_id(tmp_path):
     conn.execute(
         "INSERT INTO gate_event(event_id,event_kind,event_at,payload_json)"
         " VALUES (?,?,?,?)",
-        ("today-formation", "formation", "2026-08-20T23:30:00",
+        (formation_id, "formation", formation_at,
          _payload(freq="15m", sym="ZN0", text="15m 地门 沪锌 门上")),
     )
     conn.commit()
     third = asyncio.run(poller.scan_once())
-    assert [e["event_id"] for e in third] == ["today-formation"]
+    assert [e["event_id"] for e in third] == [formation_id]

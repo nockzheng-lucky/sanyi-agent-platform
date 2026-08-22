@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone_masked TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
+    role TEXT NOT NULL DEFAULT 'user',
     agreement_version TEXT,
     created_at TEXT NOT NULL,
     last_login_at TEXT
@@ -158,6 +159,9 @@ def init_db() -> None:
         conn.execute("ALTER TABLE usage_logs ADD COLUMN user_id INTEGER")
     if "key_id" not in usage_cols:
         conn.execute("ALTER TABLE usage_logs ADD COLUMN key_id INTEGER")
+    user_cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if "role" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
     conn.commit()
 
 

@@ -265,6 +265,16 @@ textarea { resize: none; min-height: 44px; max-height: 160px; }
 .key-actions { display: flex; gap: 6px; }
 .key-actions button { padding: 7px 10px; font-size: 12px; }
 
+.legal-card { max-width: 720px; margin: 5vh auto 0; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 28px; line-height: 1.8; }
+.legal-card h2 { margin: 18px 0 6px; font-size: 16px; }
+.legal-card p { color: var(--muted); font-size: 14px; }
+.legal-notice { color: var(--accent) !important; border: 1px solid rgba(255,122,26,.35); border-radius: 8px; padding: 8px 10px; }
+
+.admin-card { max-width: 900px; margin: 5vh auto 0; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+.admin-card section { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+.admin-card h2 { margin-bottom: 12px; }
+.admin-card .key-row { margin-bottom: 8px; }
+
 .hidden { display: none !important; }
 
 @media (max-width: 860px) {
