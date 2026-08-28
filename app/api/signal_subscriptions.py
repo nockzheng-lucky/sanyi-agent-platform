@@ -91,7 +91,14 @@ async def matches(actor: Dict[str, Any] = Depends(get_actor)):
         snapshot = await build_snapshot(actor)
     except ValueError as exc:
         raise HTTPException(status_code=403, detail=_error_detail(403, str(exc)))
-    return {"code": 0, "message": "ok", "data": {"subscriptions": snapshot}}
+    return {
+        "code": 0,
+        "message": "ok",
+        "data": {
+            "subscriptions": snapshot,
+            "refreshSeconds": SIGNAL_SUBSCRIPTION_POLL_SECONDS,
+        },
+    }
 
 
 @router.get("/stream")
@@ -99,7 +106,13 @@ async def stream(request: Request, actor: Dict[str, Any] = Depends(get_actor)):
     """SSE：订阅面板打开期间，每 30 秒刷新一次当前命中信号。"""
 
     async def gen():
-        yield "event: hello\ndata: %s\n\n" % json.dumps({"message": "已连接订阅信号流"}, ensure_ascii=False)
+        yield "event: hello\ndata: %s\n\n" % json.dumps(
+            {
+                "message": "已连接订阅信号流",
+                "refreshSeconds": SIGNAL_SUBSCRIPTION_POLL_SECONDS,
+            },
+            ensure_ascii=False,
+        )
         last_snapshot = None
         while True:
             if await request.is_disconnected():

@@ -123,6 +123,32 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   font-weight: 700;
 }
 
+.sub-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sub-panel-actions .refresh-hint {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.sub-panel-actions button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sub-panel-actions button:hover { color: var(--text); border-color: var(--accent); }
+.sub-panel-actions button:disabled { opacity: .6; cursor: wait; }
+
 .subscription-feed {
   flex: 1;
   min-height: 0;

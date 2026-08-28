@@ -40,7 +40,11 @@
           <h2>订阅信号</h2>
           <p>Agent 确认订阅后，匹配信号会持续更新在这里</p>
         </div>
-        <span id="subscriptionCount" class="count">0</span>
+        <div class="sub-panel-actions">
+          <span id="subscriptionCount" class="count">0</span>
+          <span id="subscriptionRefreshHint" class="refresh-hint">30 秒一刷新</span>
+          <button id="refreshSubscriptions" type="button">刷新</button>
+        </div>
       </div>
       <div id="subscriptionFeed" class="subscription-feed">
         <p id="subscriptionEmpty" class="signal-empty">暂无订阅。可以告诉 Agent：“帮我持续订阅 15 分钟的 20诀破诀·走2”。</p>

@@ -101,6 +101,7 @@ def test_signal_subscriptions_api_matches_and_delete(client, user_record, monkey
 
     resp = client.get("/api/v1/signal-subscriptions/matches")
     assert resp.status_code == 200
+    assert resp.json()["data"]["refreshSeconds"] == 30
     subs = resp.json()["data"]["subscriptions"]
     assert len(subs) == 1
     assert subs[0]["factorKey"] == "jue_direction"

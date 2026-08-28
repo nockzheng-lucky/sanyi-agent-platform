@@ -4,6 +4,8 @@ const messagesEl = document.getElementById("messages");
 const subscriptionFeedEl = document.getElementById("subscriptionFeed");
 const subscriptionEmptyEl = document.getElementById("subscriptionEmpty");
 const subscriptionCountEl = document.getElementById("subscriptionCount");
+const subscriptionRefreshHintEl = document.getElementById("subscriptionRefreshHint");
+const refreshSubscriptionsBtn = document.getElementById("refreshSubscriptions");
 const loadedFactorBar = document.getElementById("loadedFactorBar");
 const loadedFactorChips = document.getElementById("loadedFactorChips");
 const clearLoadedFactorsBtn = document.getElementById("clearLoadedFactors");
@@ -114,6 +116,21 @@ function clearLoadedFactors() {
 
 if (clearLoadedFactorsBtn) {
   clearLoadedFactorsBtn.addEventListener("click", clearLoadedFactors);
+}
+
+if (refreshSubscriptionsBtn) {
+  refreshSubscriptionsBtn.addEventListener("click", async () => {
+    if (refreshSubscriptionsBtn.disabled) return;
+    refreshSubscriptionsBtn.disabled = true;
+    const oldText = refreshSubscriptionsBtn.textContent;
+    refreshSubscriptionsBtn.textContent = "刷新中…";
+    try {
+      await loadSubscriptions();
+    } finally {
+      refreshSubscriptionsBtn.disabled = false;
+      refreshSubscriptionsBtn.textContent = oldText;
+    }
+  });
 }
 
 function firstDefined(...values) {
@@ -314,10 +331,17 @@ function renderSubscriptionSnapshot(snapshot) {
   }
 }
 
+function setSubscriptionRefreshHint(seconds) {
+  if (!subscriptionRefreshHintEl) return;
+  const value = Number(seconds);
+  subscriptionRefreshHintEl.textContent = `目前是 ${value > 0 ? value : 30} 秒一刷新`;
+}
+
 async function loadSubscriptions() {
   try {
     const data = await api("/api/v1/signal-subscriptions/matches");
     renderSubscriptionSnapshot((data && data.subscriptions) || []);
+    if (data && data.refreshSeconds) setSubscriptionRefreshHint(data.refreshSeconds);
   } catch (err) {
     if (subscriptionEmptyEl) {
       subscriptionEmptyEl.textContent = `订阅加载失败：${err.message}`;
@@ -329,6 +353,12 @@ async function loadSubscriptions() {
 function connectSubscriptionStream() {
   if (subscriptionStream) return;
   subscriptionStream = new EventSource("/api/v1/signal-subscriptions/stream");
+  subscriptionStream.addEventListener("hello", (msg) => {
+    try {
+      const data = JSON.parse(msg.data);
+      if (data.refreshSeconds) setSubscriptionRefreshHint(data.refreshSeconds);
+    } catch (_e) {}
+  });
   subscriptionStream.addEventListener("snapshot", (msg) => {
     try {
       const data = JSON.parse(msg.data);
