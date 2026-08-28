@@ -13,7 +13,17 @@ from typing import Any, Dict, Optional
 
 from ..db import _now_iso, get_conn
 
-FILTER_KEYS = ("frequencies", "symbols", "states", "directions", "broken", "maxAgeMinutes", "limit")
+FILTER_KEYS = (
+    "frequencies",
+    "symbols",
+    "states",
+    "directions",
+    "broken",
+    "walkCodes",
+    "walkMarks",
+    "maxAgeMinutes",
+    "limit",
+)
 
 
 def owner_key(token_record: Dict[str, Any]) -> str:

@@ -109,6 +109,23 @@ async def test_jue_direction_filter_by_symbol_and_broken(patch_source):
 
 
 @pytest.mark.asyncio
+async def test_jue_direction_filter_by_walk_code_and_mark(patch_source):
+    result = await module.jue_direction.handler(
+        {"walkCodes": ["2"], "limit": 10},
+        FactorContext(token_id=1),
+    )
+    assert result["details"]["matchedCells"] == 2
+    assert all(c["walkCode"] == "2" for c in result["details"]["cells"])
+
+    result = await module.jue_direction.handler(
+        {"walkMarks": ["80破·走B"], "limit": 10},
+        FactorContext(token_id=1),
+    )
+    assert result["details"]["matchedCells"] == 2
+    assert all(c["walkMark"] == "80破·走B" for c in result["details"]["cells"])
+
+
+@pytest.mark.asyncio
 async def test_jue_direction_empty_result(patch_source):
     result = await module.jue_direction.handler(
         {"symbols": ["ZZ0"]},

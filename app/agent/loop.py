@@ -32,6 +32,9 @@ _SYSTEM_PROMPT = """你是「三易引擎」的因子问答 Agent。
    但用户当次明确指定了不同参数时以当次为准。
 8. 用户问“当前筛选条件/现在有什么过滤”时，调用 sanyi_get_filters；
    用户说“清除筛选/取消所有过滤”时，调用 sanyi_clear_filters。
+9. 用户要求“订阅/持续监控/有信号就提醒”时，先复述筛选条件并向用户确认，
+   不要直接创建；用户明确确认后调用 sanyi_create_subscription。
+   创建后告诉用户：匹配信号会出现在聊天页左侧的“订阅信号”列表中。
 """
 
 
@@ -157,6 +160,8 @@ async def run_agent_stream(
                 yield _sse("tool_result", {"name": name, "result": result})
                 if name in ("sanyi_update_filters", "sanyi_clear_filters") and "error" not in result:
                     yield _sse("filter_update", {"name": name, "result": result})
+                if name in ("sanyi_create_subscription", "sanyi_delete_subscription") and "error" not in result:
+                    yield _sse("subscription_update", {"name": name, "result": result})
                 history.append(
                     {
                         "role": "tool",

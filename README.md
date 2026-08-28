@@ -75,6 +75,7 @@ python -m app.mcp
 - [x] 门信号读取 + 交易时段 + 30 秒轮询 + 新事件去重
 - [x] 页面 Agent（DeepSeek/OpenAI 兼容 function calling）
 - [x] 因子列表 + 加载到 Agent + 自然语言组合/调整筛选条件
+- [x] 持续信号订阅：Agent 确认后，聊天页左侧订阅面板持续显示匹配信号
 - [x] 因子：地门信号 `dimen_gate_signal`、诀与破诀 `jue_direction`
 - [x] `SANYI_GATE_EVENTS_DB` 接生产 SQLite 联调
 - [x] 真实 LLM 联调（DeepSeek key 到位后填 `.env`）

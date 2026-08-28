@@ -1,6 +1,9 @@
 "use strict";
 
 const messagesEl = document.getElementById("messages");
+const subscriptionFeedEl = document.getElementById("subscriptionFeed");
+const subscriptionEmptyEl = document.getElementById("subscriptionEmpty");
+const subscriptionCountEl = document.getElementById("subscriptionCount");
 const loadedFactorBar = document.getElementById("loadedFactorBar");
 const loadedFactorChips = document.getElementById("loadedFactorChips");
 const clearLoadedFactorsBtn = document.getElementById("clearLoadedFactors");
@@ -15,6 +18,7 @@ const sendBtn = document.getElementById("sendBtn");
 
 let history = [];
 let streaming = false;
+let subscriptionStream = null;
 
 function showLogin() {
   loginCard.classList.remove("hidden");
@@ -32,6 +36,8 @@ function showChat(actor) {
     accountEl.textContent = `令牌：${actor.token.name} · 已用 ${actor.token.quotaUsed} / ${actor.token.quotaTotal === -1 ? "不限" : actor.token.quotaTotal}`;
   }
   renderLoadedFactors();
+  loadSubscriptions();
+  connectSubscriptionStream();
 }
 
 async function api(url, options = {}) {
@@ -108,6 +114,153 @@ function clearLoadedFactors() {
 
 if (clearLoadedFactorsBtn) {
   clearLoadedFactorsBtn.addEventListener("click", clearLoadedFactors);
+}
+
+function firstDefined(...values) {
+  for (const value of values) {
+    if (value !== null && value !== undefined && value !== "") return value;
+  }
+  return null;
+}
+
+function subscriptionMatchTitle(match) {
+  return firstDefined(match.contract, match.symbol, match.name) || "未知合约";
+}
+
+function subscriptionMatchMeta(match) {
+  const freq = firstDefined(match.frequency);
+  const state = firstDefined(match.state, match.status);
+  const walk = firstDefined(match.walkCode, match.walkMark, match.walkState);
+  const direction = firstDefined(match.direction, match.formation);
+  const parts = [];
+  if (freq) parts.push(freq);
+  if (state) parts.push(state);
+  if (walk) parts.push(`走 ${walk}`);
+  if (direction) parts.push(direction);
+  return parts.join(" · ");
+}
+
+function subscriptionMatchTime(match) {
+  const value = firstDefined(
+    match.generatedAt, match.generated_at,
+    match.openAt, match.open_at,
+    match.barTime, match.bar_time
+  );
+  if (!value) return "";
+  return String(value).replace("T", " ").slice(0, 19);
+}
+
+function addSubscriptionMatch(parent, match) {
+  const card = document.createElement("div");
+  card.className = "subscription-signal";
+
+  const top = document.createElement("div");
+  top.className = "sub-s-top";
+  const title = document.createElement("div");
+  title.className = "sub-s-title";
+  title.textContent = subscriptionMatchTitle(match);
+  top.appendChild(title);
+
+  const meta = document.createElement("div");
+  meta.className = "sub-s-meta";
+  meta.textContent = subscriptionMatchMeta(match);
+  top.appendChild(meta);
+
+  const time = subscriptionMatchTime(match);
+  const timeEl = document.createElement("div");
+  timeEl.className = "sub-s-time";
+  timeEl.textContent = time ? `信号时间：${time}` : "";
+
+  card.appendChild(top);
+  if (timeEl.textContent) card.appendChild(timeEl);
+  parent.appendChild(card);
+}
+
+function renderSubscriptionSnapshot(snapshot) {
+  if (!subscriptionFeedEl) return;
+  const subscriptions = snapshot || [];
+  subscriptionFeedEl.querySelectorAll(".subscription-card").forEach((el) => el.remove());
+  subscriptionFeedEl.querySelectorAll(".subscription-signal").forEach((el) => el.remove());
+
+  if (subscriptionCountEl) subscriptionCountEl.textContent = String(subscriptions.length);
+  if (!subscriptions.length) {
+    if (subscriptionEmptyEl) subscriptionEmptyEl.style.display = "block";
+    return;
+  }
+  if (subscriptionEmptyEl) subscriptionEmptyEl.style.display = "none";
+
+  for (const sub of subscriptions) {
+    const card = document.createElement("div");
+    card.className = "subscription-card";
+
+    const head = document.createElement("div");
+    head.className = "sub-head";
+    const title = document.createElement("div");
+    title.className = "sub-title";
+    title.textContent = sub.name || sub.factorKey;
+    const meta = document.createElement("div");
+    meta.className = "sub-meta";
+    meta.textContent = `${sub.factorKey} · ${JSON.stringify(sub.filters || {})}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "删除";
+    remove.addEventListener("click", async () => {
+      try {
+        await api(`/api/v1/signal-subscriptions/${sub.id}`, { method: "DELETE" });
+        loadSubscriptions();
+      } catch (err) {
+        addMessage("error", err.message);
+      }
+    });
+    head.appendChild(title);
+    head.appendChild(remove);
+
+    card.appendChild(head);
+    card.appendChild(meta);
+    if (sub.error) {
+      const errEl = document.createElement("div");
+      errEl.className = "sub-error";
+      errEl.textContent = `订阅更新失败：${sub.error}`;
+      card.appendChild(errEl);
+    }
+    subscriptionFeedEl.appendChild(card);
+
+    for (const match of (sub.matches || []).slice(0, 20)) {
+      addSubscriptionMatch(card, match);
+    }
+    if ((sub.matches || []).length > 20) {
+      const more = document.createElement("div");
+      more.className = "sub-more";
+      more.textContent = `还有 ${sub.matches.length - 20} 条匹配`;
+      card.appendChild(more);
+    }
+  }
+}
+
+async function loadSubscriptions() {
+  try {
+    const data = await api("/api/v1/signal-subscriptions/matches");
+    renderSubscriptionSnapshot((data && data.subscriptions) || []);
+  } catch (err) {
+    if (subscriptionEmptyEl) {
+      subscriptionEmptyEl.textContent = `订阅加载失败：${err.message}`;
+      subscriptionEmptyEl.style.display = "block";
+    }
+  }
+}
+
+function connectSubscriptionStream() {
+  if (subscriptionStream) return;
+  subscriptionStream = new EventSource("/api/v1/signal-subscriptions/stream");
+  subscriptionStream.addEventListener("snapshot", (msg) => {
+    try {
+      const data = JSON.parse(msg.data);
+      renderSubscriptionSnapshot(data.subscriptions || []);
+    } catch (_e) {}
+  });
+  subscriptionStream.onerror = () => {
+    // EventSource 自动重连；同时保留现有列表。
+  };
 }
 
 function parseSse(part) {
@@ -212,6 +365,9 @@ chatForm.addEventListener("submit", async (ev) => {
           addChip(toolRow, err ? "工具调用失败" : "三易引擎已返回", err ? "err" : "ok");
         } else if (event.event === "filter_update") {
           addChip(toolRow, `筛选条件已更新`, "ok");
+        } else if (event.event === "subscription_update") {
+          addChip(toolRow, `订阅已更新`, "ok");
+          loadSubscriptions();
         } else if (event.event === "error") {
           assistantEl.textContent += `\n[错误] ${event.data.message}`;
         }

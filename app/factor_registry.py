@@ -72,6 +72,7 @@ class FactorRegistry:
         factor_key: str,
         params: Optional[Dict[str, Any]] = None,
         request_id: Optional[str] = None,
+        audit: bool = True,
     ) -> Dict[str, Any]:
         spec = self.get(factor_key)
         if spec is None:
@@ -101,29 +102,30 @@ class FactorRegistry:
         if spec.cache_seconds > 0:
             self._cache[cache_key] = (loop.time(), result)
 
-        # 成功后扣费；扣费失败按调研到的 Hitick 规则：直接报错，不返回结果。
-        if token_record.get("_table") == "user_keys":
-            charged = charge_user_key(token_record["id"], spec.cost)
-        else:
-            charged = charge_after_success(token_record["id"], spec.cost)
-        if not charged:
-            raise HTTPException(
-                status_code=402,
-                detail={"code": 402, "message": "额度不足，扣费失败", "data": None},
-            )
+        if audit:
+            # 成功后扣费；扣费失败按调研到的 Hitick 规则：直接报错，不返回结果。
+            if token_record.get("_table") == "user_keys":
+                charged = charge_user_key(token_record["id"], spec.cost)
+            else:
+                charged = charge_after_success(token_record["id"], spec.cost)
+            if not charged:
+                raise HTTPException(
+                    status_code=402,
+                    detail={"code": 402, "message": "额度不足，扣费失败", "data": None},
+                )
 
-        log_usage(
-            token_id=token_record["id"],
-            user_id=token_record.get("_user_id"),
-            key_id=token_record.get("_key_id"),
-            service="factor",
-            action="evaluate",
-            factor_key=factor_key,
-            cost=spec.cost,
-            status="ok",
-            request_id=request_id,
-            detail=json.dumps({"params": params, "summary": result.get("summary", "")}, ensure_ascii=False)[:2000],
-        )
+            log_usage(
+                token_id=token_record["id"],
+                user_id=token_record.get("_user_id"),
+                key_id=token_record.get("_key_id"),
+                service="factor",
+                action="evaluate",
+                factor_key=factor_key,
+                cost=spec.cost,
+                status="ok",
+                request_id=request_id,
+                detail=json.dumps({"params": params, "summary": result.get("summary", "")}, ensure_ascii=False)[:2000],
+            )
         return result
 
     @staticmethod

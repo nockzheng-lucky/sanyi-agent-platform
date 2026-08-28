@@ -155,6 +155,17 @@ CREATE TABLE IF NOT EXISTS agent_filters (
     filters_json TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS signal_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    factor_key TEXT NOT NULL,
+    filters_json TEXT NOT NULL,
+    name TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 _local = threading.local()

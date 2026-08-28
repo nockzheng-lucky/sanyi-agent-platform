@@ -59,6 +59,16 @@ _PARAMS_SCHEMA: Dict[str, Any] = {
             "type": ["boolean", "null"],
             "description": "可选。null=不限；true=只看破诀；false=只看未破。",
         },
+        "walkCodes": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "可选。只保留这些走法代码，例如 [\"2\"] 表示“走2”，[\"B\"] 表示“走B”。",
+        },
+        "walkMarks": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "可选。只保留特殊标记，例如 [\"20破·走2\", \"80破·走B\"]。",
+        },
         "limit": {
             "type": "integer",
             "minimum": 1,
@@ -238,6 +248,8 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
     symbols = {str(s).strip().upper() for s in (params.get("symbols") or []) if str(s).strip()}
     states = set(params.get("states") or list(DEFAULT_STATES))
     directions = set(params.get("directions") or ["long", "short"])
+    walk_codes = {str(x).strip() for x in (params.get("walkCodes") or []) if str(x).strip()}
+    walk_marks = {str(x).strip() for x in (params.get("walkMarks") or []) if str(x).strip()}
     broken_filter = params.get("broken")
     limit = int(params.get("limit") or 30)
 
@@ -269,6 +281,12 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
                 if directions and direction not in directions:
                     continue
                 if broken_filter is not None and broken is not bool(broken_filter):
+                    continue
+                walk_code = str(cell.get("walk_code") or "")
+                walk_mark = str(cell.get("walk_mark") or "")
+                if walk_codes and walk_code not in walk_codes:
+                    continue
+                if walk_marks and walk_mark not in walk_marks:
                     continue
                 matched.append(_cell_to_detail(sector, item, cell))
 

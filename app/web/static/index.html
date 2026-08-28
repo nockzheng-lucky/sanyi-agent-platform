@@ -34,6 +34,19 @@
   </section>
 
   <main id="chatCard" class="chat-card hidden">
+    <aside class="subscription-panel">
+      <div class="panel-head">
+        <div>
+          <h2>订阅信号</h2>
+          <p>Agent 确认订阅后，匹配信号会持续更新在这里</p>
+        </div>
+        <span id="subscriptionCount" class="count">0</span>
+      </div>
+      <div id="subscriptionFeed" class="subscription-feed">
+        <p id="subscriptionEmpty" class="signal-empty">暂无订阅。可以告诉 Agent：“帮我持续订阅 15 分钟的 20诀破诀·走2”。</p>
+      </div>
+    </aside>
+
     <section class="chat-main">
       <div id="needKeyBanner" class="need-key-banner hidden">
         还没有可用 Key。请先到 <a href="/keys">Key 管理</a> 申请一个 Key，然后回来使用。

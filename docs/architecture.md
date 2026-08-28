@@ -49,7 +49,9 @@ sanyi green gate_events.sqlite3（只读）
 
 “推送”与“查询”分离：
 - 外部接入推送：poller → signal_events → SignalBus → `/api/v1/signal-events/stream`（SSE）；
-- Agent/REST：统一走 `/api/v1/factors/evaluate` → 同一张 signal_events 或外部行情 API。
+- Agent/REST：统一走 `/api/v1/factors/evaluate` → 同一张 signal_events 或外部行情 API；
+- 持续订阅：`sanyi_create_subscription` 持久化条件 →
+  `/api/v1/signal-subscriptions/matches|stream` 周期评估因子并刷新聊天页左侧面板。
 
 ## 目录职责
 

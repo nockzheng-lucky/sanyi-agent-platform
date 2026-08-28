@@ -13,6 +13,12 @@ from typing import Any, Dict, List
 from fastapi import HTTPException
 
 from ..factor_registry import registry
+from ..signal_subscriptions import (
+    create_signal_subscription,
+    delete_signal_subscription,
+    list_signal_subscriptions,
+    user_id_from_record,
+)
 from .filter_store import (
     clear_filters,
     get_filter_state,
@@ -47,6 +53,16 @@ def build_tools() -> List[Dict[str, Any]]:
         "broken": {
             "type": ["boolean", "null"],
             "description": "是否只看破诀；null 表示不限。",
+        },
+        "walkCodes": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+            "description": "走法代码过滤，例如 [\"2\"] 表示“走2”；null 表示清除。",
+        },
+        "walkMarks": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+            "description": "特殊标记过滤，例如 [\"20破·走2\"]；null 表示清除。",
         },
         "maxAgeMinutes": {
             "type": ["integer", "null"],
@@ -141,6 +157,52 @@ def build_tools() -> List[Dict[str, Any]]:
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "sanyi_create_subscription",
+                "description": (
+                    "创建持续信号订阅。用户要求“订阅/持续监控/有信号提醒我”时，"
+                    "先复述筛选条件并向用户确认；用户明确确认后再调用本工具。"
+                    "filters 缺省时使用该因子当前已保存的筛选条件。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "factorKey": {"type": "string", "enum": factor_keys},
+                        "filters": {
+                            "type": "object",
+                            "properties": filter_fields,
+                            "additionalProperties": False,
+                        },
+                        "name": {"type": "string", "description": "订阅名称，例如“20诀破诀·走2”。"},
+                    },
+                    "required": ["factorKey"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "sanyi_list_subscriptions",
+                "description": "查看用户当前所有持续信号订阅。",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "sanyi_delete_subscription",
+                "description": "删除一个持续信号订阅。subscriptionId 来自 sanyi_list_subscriptions。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"subscriptionId": {"type": "integer"}},
+                    "required": ["subscriptionId"],
+                    "additionalProperties": False,
+                },
+            },
+        },
     ]
 
 
@@ -160,6 +222,44 @@ async def execute_tool(name: str, arguments: Dict[str, Any], token_record: dict)
             factor_key = arguments.get("factorKey")
             state = clear_filters(token_record, str(factor_key) if factor_key else None)
             return {"filters": state, "message": "筛选条件已清除"}
+
+        if name == "sanyi_create_subscription":
+            factor_key = str(arguments.get("factorKey") or "").strip()
+            if not factor_key:
+                return {"error": "缺少 factorKey"}
+            filters = arguments.get("filters")
+            if not isinstance(filters, dict) or not filters:
+                filters = get_filter_state(token_record).get(factor_key) or {}
+            created = create_signal_subscription(
+                token_record,
+                factor_key=factor_key,
+                filters=filters,
+                name=str(arguments.get("name") or ""),
+            )
+            return {
+                "subscription": created,
+                "message": "订阅已创建，匹配信号会出现在聊天页左侧的订阅信号列表",
+            }
+
+        if name == "sanyi_list_subscriptions":
+            try:
+                rows = list_signal_subscriptions(user_id_from_record(token_record))
+            except ValueError as exc:
+                return {"error": str(exc)}
+            return {"subscriptions": rows}
+
+        if name == "sanyi_delete_subscription":
+            try:
+                subscription_id = int(arguments.get("subscriptionId") or 0)
+                deleted = delete_signal_subscription(
+                    user_id_from_record(token_record),
+                    subscription_id,
+                )
+            except (TypeError, ValueError) as exc:
+                return {"error": "subscriptionId 不正确：%s" % exc}
+            if not deleted:
+                return {"error": "订阅不存在"}
+            return {"message": "订阅已删除", "subscriptionId": subscription_id}
 
         if name == "sanyi_update_filters":
             factor_key = str(arguments.get("factorKey") or "").strip()

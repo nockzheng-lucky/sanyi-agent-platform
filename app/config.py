@@ -81,6 +81,9 @@ GATE_EVENTS_DB = os.getenv("SANYI_GATE_EVENTS_DB", "")
 SIGNAL_POLL_ENABLED = _bool("SANYI_SIGNAL_POLL_ENABLED", True)
 SIGNAL_POLL_SECONDS = _int("SANYI_SIGNAL_POLL_SECONDS", 30)
 
+# 页面订阅面板刷新间隔：只影响浏览器里持续提醒列表的更新频率。
+SIGNAL_SUBSCRIPTION_POLL_SECONDS = _int("SANYI_SIGNAL_SUBSCRIPTION_POLL_SECONDS", 30)
+
 # 交易时段（HH:MM-HH:MM，逗号分隔；支持跨零点段）。
 # 覆盖全品种：白天 09:00-11:30 / 13:00-15:00，夜盘 21:00-02:30。
 # 读取的是最新文件，轮询跨过某品种的休市时段不会产生新事件，无害。

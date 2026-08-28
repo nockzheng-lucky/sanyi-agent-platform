@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import admin, auth, chat, factors, health, keys, mcp, signals, subscription, tokens
+from .api import admin, auth, chat, factors, health, keys, mcp, signal_subscriptions, signals, subscription, tokens
 from .config import SIGNAL_POLL_ENABLED, SYSTEM_NAME
 from .db import authenticate, create_session, init_db
 from .engine.poller import SignalPoller
@@ -53,6 +53,7 @@ app.include_router(factors.router)
 app.include_router(signals.router)
 app.include_router(tokens.router)
 app.include_router(mcp.router)
+app.include_router(signal_subscriptions.router)
 app.include_router(chat.router)
 
 
