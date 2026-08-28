@@ -81,9 +81,11 @@ sanyi green gate_events.sqlite3（只读）
 - 前端增加 tool_call 过程可视化、余额展示、错误重试。
 
 ### Phase 4：开放给用户自己的 Agent
-- MCP 服务（`sanyi_list_factors` / `sanyi_evaluate_factor`，Header `X-API-Token`）；
-- 每个因子一份 Skill Markdown 文档，供 Agent 自读自封装；
-- REST/OpenAPI 文档与多语言 SDK 示例。
+- [x] MCP 服务（`sanyi_list_factors` / `sanyi_evaluate_factor`，Header `X-API-Token`）：
+  - 远程端点 `POST /api/v1/mcp`（Streamable HTTP POST 子集，1 小时会话）；
+  - 本地 stdio 代理 `sanyi-mcp`（`python -m app.mcp`）；
+- [x] 每个因子一份 Skill Markdown 文档，供 Agent 自读自封装；
+- [ ] REST/OpenAPI 在线文档与多语言 SDK 示例。
 
 ### Phase 5：账号与支付
 - 用 New API 替换 SQLite 令牌层（保留 sk- 与 X-API-Token 契约）；

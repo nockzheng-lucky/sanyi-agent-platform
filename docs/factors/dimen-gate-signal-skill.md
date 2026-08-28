@@ -5,7 +5,7 @@
 
 ## 1. 服务信息
 
-- 平台基础域名：`https://your-domain.example.com`（本地联调：`http://127.0.0.1:8100`）
+- 平台基础域名：`https://signal.shhghf.com`（本地联调：`http://127.0.0.1:8100`）
 - 鉴权请求头：`X-API-Token: sk-sanyi-...`
 - 统一返回结构：
 
@@ -61,11 +61,43 @@ cost        0（月费订阅制，不逐次扣费）
 ## 4. HTTP 调用示例
 
 ```bash
-curl -sS 'https://your-domain.example.com/api/v1/factors/evaluate' \
+curl -sS 'https://signal.shhghf.com/api/v1/factors/evaluate' \
   -H 'Content-Type: application/json' \
   -H 'X-API-Token: sk-sanyi-...' \
   -d '{"factorKey":"dimen_gate_signal","params":{"maxAgeMinutes":120}}'
 ```
+
+## 4.1 MCP 接入（推荐给用户自己的 Agent）
+
+支持远程 MCP 的客户端可以直接连
+`POST https://signal.shhghf.com/api/v1/mcp`（Header：`X-API-Token`）。
+本地 Agent 可用平台提供的 `sanyi-mcp` stdio 服务，已经内置
+`sanyi_list_factors` 与 `sanyi_evaluate_factor` 两个工具，无需手写 HTTP 封装：
+
+```bash
+python -m app.mcp \
+  --base-url https://signal.shhghf.com \
+  --token sk-sanyi-...
+```
+
+更推荐用环境变量注入，避免 Key 进入命令历史或客户端配置明文：
+
+```bash
+SANYI_BASE_URL=https://signal.shhghf.com \
+SANYI_API_TOKEN=sk-sanyi-... \
+python -m app.mcp
+```
+
+本地联调把 `SANYI_BASE_URL` 换成 `http://127.0.0.1:8100`。诊断连通性：
+
+```bash
+python -m app.mcp --check \
+  --base-url https://signal.shhghf.com \
+  --token sk-sanyi-...
+```
+
+MCP 客户端（Claude Desktop、Cursor 等）的详细配置见
+`docs/mcp.md`；REST 契约与工具名保持一致。
 
 ## 5. 实时推送（出现即提示）
 

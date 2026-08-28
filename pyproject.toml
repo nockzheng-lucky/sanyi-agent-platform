@@ -17,6 +17,9 @@ dependencies = [
     "cryptography>=41",
 ]
 
+[project.scripts]
+sanyi-mcp = "app.mcp.__main__:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
