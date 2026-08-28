@@ -123,8 +123,76 @@ function firstDefined(...values) {
   return null;
 }
 
+const FACTOR_LABELS = {
+  dimen_gate_signal: "地门信号",
+  jue_direction: "诀与破诀",
+};
+
+const FREQUENCY_LABELS = {
+  "5m": "5分钟",
+  "15m": "15分钟",
+  "1h": "1小时",
+  "1d": "日线",
+  "1w": "周线",
+  "1M": "月线",
+};
+
+const DIRECTION_LABELS = {
+  long: "多",
+  short: "空",
+  none: "无方向",
+};
+
+function factorLabel(factorKey) {
+  return FACTOR_LABELS[factorKey] || factorKey;
+}
+
+function subscriptionTitleText(sub) {
+  const raw = sub.name || factorLabel(sub.factorKey);
+  // Agent 生成的名称里可能带（15m/1h）这类技术括号，列表里用下方中文条件展示。
+  return String(raw).replace(/（[^）]*）/g, "").trim() || factorLabel(sub.factorKey);
+}
+
+function frequencyLabel(value) {
+  return FREQUENCY_LABELS[value] || value;
+}
+
+function directionLabel(value) {
+  return DIRECTION_LABELS[value] || value;
+}
+
+function subscriptionFiltersText(filters) {
+  const parts = [];
+  const value = filters || {};
+
+  if (Array.isArray(value.frequencies) && value.frequencies.length) {
+    parts.push(value.frequencies.map(frequencyLabel).join("、"));
+  }
+  if (Array.isArray(value.states) && value.states.length) {
+    parts.push(value.states.join("、"));
+  }
+  if (value.broken === true) parts.push("只看破诀");
+  if (value.broken === false) parts.push("只看未破");
+  if (Array.isArray(value.walkCodes) && value.walkCodes.length) {
+    parts.push(`走${value.walkCodes.join("/")}`);
+  }
+  if (Array.isArray(value.walkMarks) && value.walkMarks.length) {
+    parts.push(value.walkMarks.join("、"));
+  }
+  if (Array.isArray(value.directions) && value.directions.length) {
+    parts.push(value.directions.map(directionLabel).join("/"));
+  }
+  if (Array.isArray(value.symbols) && value.symbols.length) {
+    parts.push(`品种：${value.symbols.join("、")}`);
+  }
+  if (value.maxAgeMinutes) parts.push(`最近${value.maxAgeMinutes}分钟`);
+  if (value.limit) parts.push(`最多${value.limit}条`);
+
+  return parts.length ? parts.join(" · ") : "全部信号";
+}
+
 function subscriptionMatchTitle(match) {
-  return firstDefined(match.contract, match.symbol, match.name) || "未知合约";
+  return firstDefined(match.name, match.contract, match.symbol) || "未知合约";
 }
 
 function subscriptionMatchMeta(match) {
@@ -133,10 +201,10 @@ function subscriptionMatchMeta(match) {
   const walk = firstDefined(match.walkCode, match.walkMark, match.walkState);
   const direction = firstDefined(match.direction, match.formation);
   const parts = [];
-  if (freq) parts.push(freq);
+  if (freq) parts.push(frequencyLabel(freq));
   if (state) parts.push(state);
-  if (walk) parts.push(`走 ${walk}`);
-  if (direction) parts.push(direction);
+  if (walk) parts.push(`走${walk}`);
+  if (direction) parts.push(directionLabel(direction));
   return parts.join(" · ");
 }
 
@@ -197,10 +265,10 @@ function renderSubscriptionSnapshot(snapshot) {
     head.className = "sub-head";
     const title = document.createElement("div");
     title.className = "sub-title";
-    title.textContent = sub.name || sub.factorKey;
+    title.textContent = subscriptionTitleText(sub);
     const meta = document.createElement("div");
     meta.className = "sub-meta";
-    meta.textContent = `${sub.factorKey} · ${JSON.stringify(sub.filters || {})}`;
+    meta.textContent = factorLabel(sub.factorKey) + " · " + subscriptionFiltersText(sub.filters);
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "删除";
