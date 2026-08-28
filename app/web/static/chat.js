@@ -245,6 +245,21 @@ function subscriptionMatchTimeValue(match) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function formatSubscriptionTime(value) {
+  const text = String(value || "");
+  const parsed = Date.parse(text);
+  if (!Number.isFinite(parsed)) return text.replace("T", " ").slice(0, 19);
+  const date = new Date(parsed);
+  return [
+    date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate()),
+    pad2(date.getHours()) + ":" + pad2(date.getMinutes()) + ":" + pad2(date.getSeconds()),
+  ].join(" ");
+}
+
 function subscriptionMatchTimeText(match) {
   const value = firstDefined(
     match.updatedAt, match.generatedAt, match.generated_at,
@@ -253,7 +268,7 @@ function subscriptionMatchTimeText(match) {
   );
   if (!value) return "";
   const label = firstDefined(match.updatedAt, match.generatedAt) ? "更新时间" : "信号时间";
-  return `${label}：${String(value).replace("T", " ").slice(0, 19)}`;
+  return label + "：" + formatSubscriptionTime(value) + "（本地时间）";
 }
 
 function addSubscriptionMatch(parent, match) {
