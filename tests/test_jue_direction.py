@@ -68,6 +68,7 @@ async def test_jue_direction_default_overview(patch_source):
     result = await module.jue_direction.handler({}, FactorContext(token_id=1))
     assert result["factorKey"] == "jue_direction"
     assert result["details"]["matchedCells"] == 6  # 默认排除 1 个“无诀”
+    assert all(c["updatedAt"] == SAMPLE["updated_at"] for c in result["details"]["cells"])
     assert result["details"]["counts"]["long"] == 3
     assert result["details"]["counts"]["short"] == 3
     assert result["details"]["counts"]["broken"] == 3

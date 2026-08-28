@@ -148,6 +148,8 @@ _OUTPUT_SCHEMA: Dict[str, Any] = {
                             "walkMark": {"type": ["string", "null"]},
                             "pairConfirmPrev": {"type": "boolean"},
                             "pairConfirmNext": {"type": "boolean"},
+                            "updatedAt": {"type": ["string", "null"]},
+                            "generatedAt": {"type": ["string", "null"]},
                         },
                     },
                 },
@@ -219,7 +221,12 @@ def _norm_rules(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
-def _cell_to_detail(sector: Dict[str, Any], item: Dict[str, Any], cell: Dict[str, Any]) -> Dict[str, Any]:
+def _cell_to_detail(
+    sector: Dict[str, Any],
+    item: Dict[str, Any],
+    cell: Dict[str, Any],
+    updated_at: Optional[str] = None,
+) -> Dict[str, Any]:
     return {
         "symbol": item.get("sym"),
         "name": item.get("name"),
@@ -240,6 +247,8 @@ def _cell_to_detail(sector: Dict[str, Any], item: Dict[str, Any], cell: Dict[str
         "walkMark": cell.get("walk_mark") or None,
         "pairConfirmPrev": bool(cell.get("pair_confirm_prev")),
         "pairConfirmNext": bool(cell.get("pair_confirm_next")),
+        "updatedAt": updated_at,
+        "generatedAt": updated_at,
     }
 
 
@@ -288,7 +297,7 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
                     continue
                 if walk_marks and walk_mark not in walk_marks:
                     continue
-                matched.append(_cell_to_detail(sector, item, cell))
+                matched.append(_cell_to_detail(sector, item, cell, payload.get("updated_at")))
 
     matched.sort(
         key=lambda c: (
@@ -298,6 +307,12 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
             str(c["symbol"] or ""),
             str(c["state"] or ""),
         )
+    )
+    # 更新时间倒序：源数据若未来提供 cell 级时间，可直接生效；
+    # 当前 qh API 只有全局 updated_at，同一快照内时间相同，顺序稳定。
+    matched.sort(
+        key=lambda c: str(c.get("updatedAt") or c.get("generatedAt") or ""),
+        reverse=True,
     )
 
     long = sum(1 for c in matched if c["direction"] == "long")

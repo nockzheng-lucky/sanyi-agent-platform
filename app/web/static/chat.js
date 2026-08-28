@@ -234,14 +234,26 @@ function subscriptionMatchMeta(match) {
   return parts.join(" · ");
 }
 
-function subscriptionMatchTime(match) {
+function subscriptionMatchTimeValue(match) {
   const value = firstDefined(
-    match.generatedAt, match.generated_at,
+    match.updatedAt, match.generatedAt, match.generated_at,
+    match.openAt, match.open_at,
+    match.barTime, match.bar_time
+  );
+  if (!value) return 0;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function subscriptionMatchTimeText(match) {
+  const value = firstDefined(
+    match.updatedAt, match.generatedAt, match.generated_at,
     match.openAt, match.open_at,
     match.barTime, match.bar_time
   );
   if (!value) return "";
-  return String(value).replace("T", " ").slice(0, 19);
+  const label = firstDefined(match.updatedAt, match.generatedAt) ? "更新时间" : "信号时间";
+  return `${label}：${String(value).replace("T", " ").slice(0, 19)}`;
 }
 
 function addSubscriptionMatch(parent, match) {
@@ -260,10 +272,10 @@ function addSubscriptionMatch(parent, match) {
   meta.textContent = subscriptionMatchMeta(match);
   top.appendChild(meta);
 
-  const time = subscriptionMatchTime(match);
+  const timeText = subscriptionMatchTimeText(match);
   const timeEl = document.createElement("div");
   timeEl.className = "sub-s-time";
-  timeEl.textContent = time ? `信号时间：${time}` : "";
+  timeEl.textContent = timeText;
 
   card.appendChild(top);
   if (timeEl.textContent) card.appendChild(timeEl);
@@ -319,7 +331,10 @@ function renderSubscriptionSnapshot(snapshot) {
     }
     subscriptionFeedEl.appendChild(card);
 
-    for (const match of (sub.matches || []).slice(0, 20)) {
+    const sortedMatches = (sub.matches || []).slice().sort((a, b) => {
+      return subscriptionMatchTimeValue(b) - subscriptionMatchTimeValue(a);
+    });
+    for (const match of sortedMatches.slice(0, 20)) {
       addSubscriptionMatch(card, match);
     }
     if ((sub.matches || []).length > 20) {
