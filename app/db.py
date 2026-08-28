@@ -149,6 +149,12 @@ CREATE TABLE IF NOT EXISTS signal_events (
     notified INTEGER NOT NULL DEFAULT 0,
     is_baseline INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS agent_filters (
+    owner_key TEXT PRIMARY KEY,
+    filters_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 _local = threading.local()

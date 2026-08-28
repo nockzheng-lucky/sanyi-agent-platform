@@ -87,101 +87,14 @@ button {
 button:disabled { opacity: .5; cursor: not-allowed; }
 
 .chat-card {
-  display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: calc(100vh - 90px);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
   overflow: hidden;
 }
-
-.signal-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-right: 1px solid var(--border);
-  background: var(--panel2);
-}
-
-.panel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.panel-head h2 { font-size: 15px; }
-.panel-head p { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.panel-head .count {
-  background: var(--accent);
-  color: #1a1208;
-  border-radius: 999px;
-  padding: 2px 9px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-@keyframes signal-pop {
-  0% { opacity: 0; transform: translateY(-8px) scale(.97); }
-  60% { opacity: 1; transform: translateY(1px) scale(1.01); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.signal-card.pushed {
-  animation: signal-pop .5s ease-out;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(255,122,26,.25), 0 6px 18px rgba(255,122,26,.12);
-}
-
-.signal-feed {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.signal-empty { color: var(--muted); font-size: 13px; padding: 8px 4px; }
-
-.signal-card {
-  border: 1px solid rgba(255,122,26,.35);
-  background: rgba(255,122,26,.07);
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 13px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.signal-card:hover { border-color: var(--accent); }
-
-.signal-card .s-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.signal-card .s-title { font-weight: 700; font-size: 14px; }
-
-.signal-card .s-badge {
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.signal-card .s-badge.open { background: rgba(51,209,122,.15); color: var(--green); }
-.signal-card .s-badge.formation { background: rgba(255,122,26,.18); color: var(--accent); }
-
-.signal-card .s-row { color: var(--muted); font-size: 12px; margin-top: 3px; }
-.signal-card .s-time { color: var(--green); }
 
 .factor-card {
   border: 1px solid var(--border);
@@ -239,6 +152,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .factor-card .f-meta { color: var(--muted); font-size: 11px; }
 
 .chat-main {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -517,10 +431,3 @@ body.has-sidebar .auth-card {
 }
 
 .hidden { display: none !important; }
-
-@media (max-width: 860px) {
-  .chat-card { grid-template-columns: 1fr; grid-template-rows: 220px minmax(0, 1fr); }
-  .signal-panel { border-right: 0; border-bottom: 1px solid var(--border); }
-  .signal-feed { flex-direction: row; overflow-x: auto; overflow-y: hidden; }
-  .signal-card { min-width: 240px; }
-}

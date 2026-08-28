@@ -1,7 +1,11 @@
 """Agent 工具白名单。
 
 页面 Agent 只能调用这里列出的工具；未来开放给用户自己的 Agent 时，
-MCP/REST 复用同一套 schema，保证行为一致。
+MCP/REST 复用同一套 factor schema，保证行为一致。
+
+除因子查询外，Agent 还负责维护“当前筛选条件”：
+用户说“只看 15 分钟”“只保留破诀”时，模型调用 sanyi_update_filters
+持久化条件；后续 evaluate 会自动合并这些条件，当次显式参数优先。
 """
 import json
 from typing import Any, Dict, List
@@ -9,10 +13,53 @@ from typing import Any, Dict, List
 from fastapi import HTTPException
 
 from ..factor_registry import registry
+from .filter_store import (
+    clear_filters,
+    get_filter_state,
+    merge_params,
+    patch_filters,
+)
 
 
 def build_tools() -> List[Dict[str, Any]]:
     factor_keys = [d["factorKey"] for d in registry.descriptors()]
+    filter_fields: Dict[str, Any] = {
+        "frequencies": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+            "description": "周期过滤，例如 [\"15m\"]；null 表示清除该限制。",
+        },
+        "symbols": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+            "description": "品种过滤，例如 [\"AU0\"]；null 表示清除该限制。",
+        },
+        "states": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+            "description": "状态过滤，例如 [\"80诀破诀\"]；null 表示清除该限制。",
+        },
+        "directions": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["long", "short", "none"]},
+            "description": "方向过滤；null 表示清除该限制。",
+        },
+        "broken": {
+            "type": ["boolean", "null"],
+            "description": "是否只看破诀；null 表示不限。",
+        },
+        "maxAgeMinutes": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "只看最近 N 分钟；null 表示清除该限制。",
+        },
+        "limit": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "最多返回条数；null 表示清除该限制。",
+        },
+    }
     return [
         {
             "type": "function",
@@ -28,7 +75,9 @@ def build_tools() -> List[Dict[str, Any]]:
                 "name": "sanyi_evaluate_factor",
                 "description": (
                     "执行三易引擎因子计算。必须使用列表接口返回的 factorKey；"
-                    "params 严格按因子 paramsSchema 填写。结果里的 generatedAt 必须转述给用户。"
+                    "params 严格按因子 paramsSchema 填写。若用户已设置当前筛选条件，"
+                    "这里未显式传的参数会自动套用存量筛选条件；显式传参优先。"
+                    "结果里的 generatedAt 必须转述给用户。"
                 ),
                 "parameters": {
                     "type": "object",
@@ -41,6 +90,57 @@ def build_tools() -> List[Dict[str, Any]]:
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "sanyi_update_filters",
+                "description": (
+                    "保存/调整某个因子的持久筛选条件。用户用自然语言提出筛选偏好时调用："
+                    "例如“只看 15 分钟”就把对应 factorKey 的 frequencies 改成 [\"15m\"]；"
+                    "“只保留破诀”就改 states 或 broken。只传需要变化的字段，未传字段保持不变；"
+                    "replace=true 表示整体替换该因子的条件。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "factorKey": {"type": "string", "enum": factor_keys},
+                        "filters": {
+                            "type": "object",
+                            "properties": filter_fields,
+                            "additionalProperties": False,
+                        },
+                        "replace": {
+                            "type": "boolean",
+                            "description": "默认 false=只更新传入字段；true=先清空该因子旧条件再写入。",
+                        },
+                    },
+                    "required": ["factorKey", "filters"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "sanyi_get_filters",
+                "description": "查看当前所有因子的持久筛选条件。用户问“现在有什么筛选条件”时调用。",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "sanyi_clear_filters",
+                "description": "清除筛选条件。factorKey 省略时清除全部；指定时只清除该因子。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "factorKey": {"type": ["string", "null"], "enum": factor_keys + [None]},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+        },
     ]
 
 
@@ -48,20 +148,54 @@ async def execute_tool(name: str, arguments: Dict[str, Any], token_record: dict)
     """执行工具并返回给模型的结果。异常也要作为工具结果返回，而不是中断会话。"""
     try:
         if name == "sanyi_list_factors":
-            return {"factors": registry.descriptors()}
+            return {
+                "factors": registry.descriptors(),
+                "currentFilters": get_filter_state(token_record),
+            }
+
+        if name == "sanyi_get_filters":
+            return {"filters": get_filter_state(token_record)}
+
+        if name == "sanyi_clear_filters":
+            factor_key = arguments.get("factorKey")
+            state = clear_filters(token_record, str(factor_key) if factor_key else None)
+            return {"filters": state, "message": "筛选条件已清除"}
+
+        if name == "sanyi_update_filters":
+            factor_key = str(arguments.get("factorKey") or "").strip()
+            if not factor_key:
+                return {"error": "缺少 factorKey"}
+            patch = arguments.get("filters") or {}
+            if not isinstance(patch, dict):
+                return {"error": "filters 必须是对象"}
+            state = patch_filters(
+                token_record,
+                factor_key=factor_key,
+                patch=patch,
+                replace=bool(arguments.get("replace")),
+            )
+            return {
+                "filters": state,
+                "message": "筛选条件已更新：%s" % factor_key,
+            }
+
         if name == "sanyi_evaluate_factor":
             factor_key = str(arguments.get("factorKey") or "").strip()
             if not factor_key:
                 return {"error": "缺少 factorKey"}
-            params = arguments.get("params") or {}
-            if not isinstance(params, dict):
+            explicit = arguments.get("params") or {}
+            if not isinstance(explicit, dict):
                 return {"error": "params 必须是对象"}
+            stored = get_filter_state(token_record).get(factor_key) or {}
+            params = merge_params(stored, explicit)
             result = await registry.evaluate(
                 token_record=token_record,
                 factor_key=factor_key,
                 params=params,
             )
+            result["appliedFilters"] = params
             return result
+
         return {"error": "未知工具：%s" % name}
     except HTTPException as exc:
         return {"error": json.dumps(exc.detail, ensure_ascii=False)}

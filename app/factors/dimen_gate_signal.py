@@ -196,7 +196,7 @@ dimen_gate_signal = FactorSpec(
     description=(
         "读取三易引擎当前门信号：type=地门，级别 5m/15m/1h，"
         "live_status 为 已开 或 无动作·门上。"
-        "事件由平台轮询器发现后实时推送到页面；本接口用于 Agent 查询最近信号。"
+        "事件由平台轮询器写入 signal_events；本因子用于 Agent 查询最近信号。"
     ),
     params_schema=_PARAMS_SCHEMA,
     output_schema=_OUTPUT_SCHEMA,

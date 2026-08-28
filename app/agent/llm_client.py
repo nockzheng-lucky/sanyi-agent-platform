@@ -140,17 +140,34 @@ def _mock_once(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, An
             factor_key = "dimen_gate_signal"
             params = {"maxAgeMinutes": 120}
             raw_arguments = "{\"factorKey\": \"dimen_gate_signal\", \"params\": {\"maxAgeMinutes\": 120}}"
+
+        tool_calls = []
+        # 本地 MOCK 也演示“自然语言调整筛选条件”：先存 filters，再执行查询。
+        if any(k in last_user for k in ("只看", "只要", "筛选", "保留", "改成", "调整为")):
+            freq = "15m" if ("15分钟" in last_user or "15 分钟" in last_user) else ("5m" if ("5分钟" in last_user or "5 分钟" in last_user) else "1h")
+            filters = {"frequencies": [freq]}
+            filter_raw = "{\"factorKey\": \"%s\", \"filters\": {\"frequencies\": [\"%s\"]}}" % (factor_key, freq)
+            tool_calls.append(
+                {
+                    "id": "call_mock_filter",
+                    "name": "sanyi_update_filters",
+                    "arguments": {"factorKey": factor_key, "filters": filters},
+                    "raw_arguments": filter_raw,
+                }
+            )
+
+        tool_calls.append(
+            {
+                "id": "call_mock_1",
+                "name": "sanyi_evaluate_factor",
+                "arguments": {"factorKey": factor_key, "params": params},
+                "raw_arguments": raw_arguments,
+            }
+        )
         return {
             "content": "",
             "chunks": [],
-            "tool_calls": [
-                {
-                    "id": "call_mock_1",
-                    "name": "sanyi_evaluate_factor",
-                    "arguments": {"factorKey": factor_key, "params": params},
-                    "raw_arguments": raw_arguments,
-                }
-            ],
+            "tool_calls": tool_calls,
             "usage": {"input": 120, "output": 20},
         }
     final = "（本地假模型）我是三易引擎 Agent。当前没有配置真实 LLM，"

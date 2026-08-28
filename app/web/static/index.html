@@ -34,19 +34,6 @@
   </section>
 
   <main id="chatCard" class="chat-card hidden">
-    <aside class="signal-panel">
-      <div class="panel-head">
-        <div>
-          <h2>实时门信号</h2>
-          <p>新出现的信号会自动弹到这里</p>
-        </div>
-        <span id="signalCount" class="count">0</span>
-      </div>
-      <div id="signalFeed" class="signal-feed">
-        <p id="signalEmpty" class="signal-empty">正在等待新信号…</p>
-      </div>
-    </aside>
-
     <section class="chat-main">
       <div id="needKeyBanner" class="need-key-banner hidden">
         还没有可用 Key。请先到 <a href="/keys">Key 管理</a> 申请一个 Key，然后回来使用。
@@ -59,7 +46,7 @@
       </div>
       <div id="messages" class="messages"></div>
       <form id="chatForm" class="composer">
-        <textarea id="chatInput" rows="1" placeholder="输入问题，或点击信号卡片让 Agent 解读"></textarea>
+        <textarea id="chatInput" rows="1" placeholder="输入问题，或先到左侧因子列表加载因子"></textarea>
         <button type="submit" id="sendBtn">发送</button>
       </form>
       <p class="disclaimer">因子结果仅供研究观察，不构成投资建议。AI 生成内容可能存在偏差。</p>

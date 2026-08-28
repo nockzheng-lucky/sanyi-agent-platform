@@ -70,6 +70,25 @@ def test_chat_accepts_factor_keys_payload(client):
     assert "tool_call" in [name for name, _ in _sse_events(resp.text)]
 
 
+def test_chat_natural_language_filter_update(client):
+    token = issue_token(name="chat-filter-update", quota_total=100000, rate_limit_per_min=1000)["token"]
+    assert client.post("/api/chat/login", json={"token": token}).status_code == 200
+    resp = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "只看 15 分钟的地门信号"}],
+            "factorKeys": ["dimen_gate_signal"],
+        },
+    )
+    assert resp.status_code == 200
+    events = _sse_events(resp.text)
+    names = [name for name, _ in events]
+    tool_calls = [data for name, data in events if name == "tool_call"]
+    assert "filter_update" in names
+    assert any(call.get("name") == "sanyi_update_filters" for call in tool_calls)
+    assert any(call.get("name") == "sanyi_evaluate_factor" for call in tool_calls)
+
+
 def test_chat_entry_token_is_exchanged_for_cookie(client):
     token = issue_token(name="entry-test", quota_total=100000)["token"]
     resp = client.get(f"/chat?token={token}", follow_redirects=False)

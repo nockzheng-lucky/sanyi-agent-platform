@@ -30,39 +30,44 @@ sanyi green gate_events.sqlite3（只读）
   → 当天交易日窗口：今天，或昨天 21:00 之后
   → 筛选：gate_type=地门 + freq∈{5m,15m,1h}
            formation(门上) / first-action(open)
-  → 新 event_id 入库 signal_events，并通过 SSE 推给页面
-  → 页面 Agent 实时弹信号卡片；点击卡片让 LLM 解读
+  → 新 event_id 入库 signal_events
+  → 因子 dimen_gate_signal 读取最近事件
 
-浏览器 /chat?token=sk-...
-  → 服务端校验令牌，发 HttpOnly 会话 cookie
+浏览器 /chat
+  → 用户登录会话或旧令牌会话
+  → 左侧因子列表把因子“加载到 Agent”
   → POST /api/chat（SSE）
   → LLM function calling
        ├─ sanyi_list_factors       → 因子注册表
-       └─ sanyi_evaluate_factor    → 读取 signal_events 最近事件
+       ├─ sanyi_update_filters     → 自然语言维护持久筛选条件
+       ├─ sanyi_get_filters / sanyi_clear_filters
+       └─ sanyi_evaluate_factor    → 自动合并存量筛选条件后执行
                                       ├─ 参数 JSON Schema 校验
                                       ├─ 月费制：不扣额度
                                       └─ 写 usage_logs 审计
 ```
 
-“出现即提示”与“查询”是两条线：
-- 提示：poller → signal_events → SignalBus → `/api/v1/signal-events/stream`（SSE）；
-- 查询：Agent/REST → `/api/v1/factors/evaluate` → 同一张 signal_events。
+“推送”与“查询”分离：
+- 外部接入推送：poller → signal_events → SignalBus → `/api/v1/signal-events/stream`（SSE）；
+- Agent/REST：统一走 `/api/v1/factors/evaluate` → 同一张 signal_events 或外部行情 API。
 
 ## 目录职责
 
 - `app/factor_registry.py`：因子的单一事实来源；页面 Agent 与未来 MCP/REST 共用。
-- `app/factors/dimen_gate_signal.py`：因子定义与查询逻辑；不重算引擎，只读事件。
+- `app/factors/dimen_gate_signal.py`：门信号因子；不重算引擎，只读事件。
+- `app/factors/jue_direction.py`：诀与破诀因子；只读 qh HTTP API。
 - `app/engine/gate_reader.py`：只读 gate_events.sqlite3，按当天交易日筛选目标信号。
-- `app/engine/poller.py`：交易时段轮询 + event_id 去重 + 新事件推送。
-- `app/db.py`：令牌哈希、额度、日志、会话、signal_events；原型用 SQLite。
+- `app/engine/poller.py`：交易时段轮询 + event_id 去重 + 新事件写入。
+- `app/db.py`：令牌哈希、额度、日志、会话、signal_events、agent_filters；原型用 SQLite。
+- `app/agent/filter_store.py`：按用户持久化自然语言筛选条件。
 - `app/agent/`：LLM 客户端与工具调用循环。
-- `app/web/`：聊天页静态资源与实时信号卡片。
+- `app/web/`：Agent 聊天页、因子列表页等静态资源。
 
 ## 关键设计约束
 
 1. 令牌明文只出现一次（签发时），库里只存 SHA-256；日志永不记录令牌。
 2. 页面聊天的 cookie 只放服务端会话 ID，不放令牌。
-3. 工具白名单固定：LLM 只能调用 `sanyi_list_factors` / `sanyi_evaluate_factor`。
+3. 工具白名单固定：LLM 只能调用因子查询工具与筛选条件维护工具，不能执行任意代码或访问文件。
 4. 因子输出只给“结论 + 结构化 details”，不返回原始行情明细；机密因子可只返回“命中/未命中”。
 5. 月费订阅制下不逐次扣费；所有调用仍写 usage_logs，后续据此做风控和成本核算。
 6. 三易引擎数据访问必须经过 adapter，不允许页面/Agent 直连生产库。
