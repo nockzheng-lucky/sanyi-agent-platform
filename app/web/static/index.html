@@ -47,13 +47,26 @@
       </div>
     </aside>
 
+    <aside class="factor-panel">
+      <div class="panel-head">
+        <div>
+          <h2>因子列表</h2>
+          <p>点击因子，让 Agent 用对应 factorKey 解读</p>
+        </div>
+        <span id="factorCount" class="count">0</span>
+      </div>
+      <div id="factorList" class="factor-list">
+        <p id="factorEmpty" class="signal-empty">正在加载因子…</p>
+      </div>
+    </aside>
+
     <section class="chat-main">
       <div id="needKeyBanner" class="need-key-banner hidden">
         还没有可用 Key。请先到 <a href="/keys">Key 管理</a> 申请一个 Key，然后回来使用。
       </div>
       <div id="messages" class="messages"></div>
       <form id="chatForm" class="composer">
-        <textarea id="chatInput" rows="1" placeholder="输入问题，或点击右侧信号卡片让 Agent 解读"></textarea>
+        <textarea id="chatInput" rows="1" placeholder="输入问题，或点击信号/因子卡片让 Agent 解读"></textarea>
         <button type="submit" id="sendBtn">发送</button>
       </form>
       <p class="disclaimer">因子结果仅供研究观察，不构成投资建议。AI 生成内容可能存在偏差。</p>

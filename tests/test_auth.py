@@ -66,6 +66,8 @@ def test_register_login_key_and_chat_flow(client):
     assert revoke.status_code == 200
     keys_after = client.get("/api/v1/keys").json()["data"]["keys"]
     assert keys_after == []
+    # 因子列表现在也接受页面登录会话；这里清除用户 cookie，只验证已撤销的 Key。
+    client.cookies.clear()
     resp = client.get("/api/v1/factors", headers={"X-API-Token": token})
     assert resp.status_code == 401
 

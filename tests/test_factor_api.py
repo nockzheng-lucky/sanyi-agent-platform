@@ -1,3 +1,8 @@
+import uuid
+
+from app.accounts import create_user, create_user_session
+
+
 def test_health(client):
     resp = client.get("/api/health")
     assert resp.status_code == 200
@@ -6,6 +11,27 @@ def test_health(client):
 
 def test_factors_requires_token(client):
     resp = client.get("/api/v1/factors")
+    assert resp.status_code == 401
+
+
+def test_factor_list_visible_to_user_session_without_key(client):
+    """页面右侧栏需要在用户还没有 Key 时也能浏览因子元信息。"""
+    phone = "138" + uuid.uuid4().hex[:8]
+    user = create_user(phone, "password123")
+    session = create_user_session(user["id"])
+    client.cookies.set("sanyi_user", session)
+
+    resp = client.get("/api/v1/factors")
+    assert resp.status_code == 200
+    keys = [f["factorKey"] for f in resp.json()["data"]["factors"]]
+    assert "dimen_gate_signal" in keys
+
+    # 元信息可读，但执行因子的 REST 入口仍只接受 X-API-Token/Bearer；
+    # 页面 Agent 走 /api/chat，由 get_actor 校验 Key 与订阅。
+    resp = client.post(
+        "/api/v1/factors/evaluate",
+        json={"factorKey": "dimen_gate_signal", "params": {}},
+    )
     assert resp.status_code == 401
 
 

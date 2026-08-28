@@ -171,6 +171,34 @@ async def get_token_or_session(
     return await get_actor(request, sanyi_user=sanyi_user, sanyi_session=sanyi_session)
 
 
+async def get_token_or_user_session(
+    request: Request,
+    sanyi_user: Optional[str] = Cookie(default=None),
+    sanyi_session: Optional[str] = Cookie(default=None),
+) -> dict:
+    """因子元信息读取身份。
+
+    因子列表是免费元数据，页面用户在“还没有 Key”时也应该能先浏览；
+    因此这里接受用户登录会话本身，不强制存在默认 Key。执行因子仍然走
+    get_actor / require_token，没有 Key 或订阅时不会被放行。
+    """
+    record = _auth_record(extract_token(request))
+    if record is not None:
+        return record
+
+    user_id = get_user_id_by_session(sanyi_user or "")
+    if user_id is not None:
+        user = get_user(user_id)
+        if user is None or user["status"] != "active":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"code": 401, "message": "账号不可用", "data": None},
+            )
+        return {**user, "_table": "users"}
+
+    return await get_session_token(sanyi_session)
+
+
 def require_admin(request: Request) -> None:
     """原型期的令牌签发接口保护。默认关闭，开启后需要 ADMIN_KEY。"""
     from .config import ADMIN_KEY, ENABLE_TOKEN_ISSUE_API
