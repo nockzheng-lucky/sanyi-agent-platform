@@ -143,6 +143,11 @@ const DIRECTION_LABELS = {
   none: "无方向",
 };
 
+const GATE_STATUS_LABELS = {
+  OPEN: "地门开",
+  FORMATION_ABOVE: "地门形成·无动作门上",
+};
+
 function factorLabel(factorKey) {
   return FACTOR_LABELS[factorKey] || factorKey;
 }
@@ -159,6 +164,10 @@ function frequencyLabel(value) {
 
 function directionLabel(value) {
   return DIRECTION_LABELS[value] || value;
+}
+
+function signalStatusLabel(value) {
+  return GATE_STATUS_LABELS[value] || value;
 }
 
 function subscriptionFiltersText(filters) {
@@ -202,7 +211,7 @@ function subscriptionMatchMeta(match) {
   const direction = firstDefined(match.direction, match.formation);
   const parts = [];
   if (freq) parts.push(frequencyLabel(freq));
-  if (state) parts.push(state);
+  if (state) parts.push(signalStatusLabel(state));
   if (walk) parts.push(`走${walk}`);
   if (direction) parts.push(directionLabel(direction));
   return parts.join(" · ");
