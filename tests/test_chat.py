@@ -1,5 +1,6 @@
 import json
 
+from app.agent.loop import _history_from
 from app.db import issue_token
 
 
@@ -42,6 +43,31 @@ def test_chat_flow_with_mock_llm(client):
 
     me = client.get("/api/v1/me", headers={"X-API-Token": token}).json()["data"]["token"]
     assert me["quotaUsed"] == 0
+
+
+def test_chat_history_includes_loaded_factor_context():
+    history = _history_from(
+        [{"role": "user", "content": "看看因子结果"}],
+        factor_keys=["dimen_gate_signal", "no_such_factor"],
+    )
+    system_prompt = history[0]["content"]
+    assert "dimen_gate_signal" in system_prompt
+    assert "地门信号" in system_prompt
+    assert "no_such_factor" not in system_prompt
+
+
+def test_chat_accepts_factor_keys_payload(client):
+    token = issue_token(name="chat-factor-keys", quota_total=100000, rate_limit_per_min=1000)["token"]
+    assert client.post("/api/chat/login", json={"token": token}).status_code == 200
+    resp = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "地门信号怎么样"}],
+            "factorKeys": ["dimen_gate_signal"],
+        },
+    )
+    assert resp.status_code == 200
+    assert "tool_call" in [name for name, _ in _sse_events(resp.text)]
 
 
 def test_chat_entry_token_is_exchanged_for_cookie(client):

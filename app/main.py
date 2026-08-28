@@ -79,6 +79,11 @@ async def keys_page():
     return FileResponse(_web_dir / "keys.html", headers={"Cache-Control": "no-store"})
 
 
+@app.get("/factors", include_in_schema=False)
+async def factors_page():
+    return FileResponse(_web_dir / "factors.html", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/admin", include_in_schema=False)
 async def admin_page():
     return FileResponse(_web_dir / "admin.html", headers={"Cache-Control": "no-store"})

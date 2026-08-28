@@ -114,6 +114,7 @@ async def chat(payload: ChatRequest, actor: dict = Depends(get_actor)):
             messages=[m.model_dump() for m in payload.messages],
             token_record=actor,
             request_id=payload.requestId or "",
+            factor_keys=payload.factorKeys,
         ),
         media_type="text/event-stream",
         headers={

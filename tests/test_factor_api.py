@@ -14,6 +14,13 @@ def test_factors_requires_token(client):
     assert resp.status_code == 401
 
 
+def test_factors_page_is_served(client):
+    resp = client.get("/factors")
+    assert resp.status_code == 200
+    assert "因子列表" in resp.text
+    assert "/chat/factors.js" in resp.text
+
+
 def test_factor_list_visible_to_user_session_without_key(client):
     """页面右侧栏需要在用户还没有 Key 时也能浏览因子元信息。"""
     phone = "138" + uuid.uuid4().hex[:8]

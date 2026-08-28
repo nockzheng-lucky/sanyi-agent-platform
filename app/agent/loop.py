@@ -9,10 +9,11 @@
 - error       失败
 """
 import json
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from ..config import CHAT_MAX_MESSAGES, CHAT_MAX_TOOL_ROUNDS, LLM_MOCK, LLM_MODEL, SYSTEM_NAME
 from ..db import log_usage
+from ..factor_registry import registry
 from .llm_client import chat_once
 from .tools import build_tools, execute_tool
 
@@ -32,8 +33,33 @@ def _sse(event: str, data: Any) -> str:
     return "event: %s\ndata: %s\n\n" % (event, json.dumps(data, ensure_ascii=False, default=str))
 
 
-def _history_from(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    history: List[Dict[str, Any]] = [{"role": "system", "content": _SYSTEM_PROMPT}]
+def _factor_context(factor_keys: List[str]) -> str:
+    """把用户在因子列表页加载的因子变成系统提示，Agent 会优先使用它们。"""
+    if not factor_keys:
+        return ""
+    descriptors = {d["factorKey"]: d for d in registry.descriptors()}
+    loaded = []
+    for key in factor_keys:
+        key = str(key or "").strip()
+        desc = descriptors.get(key)
+        if key and desc and desc.get("status") == "active" and key not in loaded:
+            loaded.append(key)
+    if not loaded:
+        return ""
+    names = "、".join("%s（%s）" % (k, descriptors[k]["name"]) for k in loaded)
+    return (
+        "\n\n用户已在“因子列表”中加载以下因子：%s。"
+        "回答与这些因子相关的问题时优先调用对应的 factorKey；"
+        "问题不相关时忽略这个提示。" % names
+    )
+
+
+def _history_from(
+    messages: List[Dict[str, Any]],
+    factor_keys: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    system_prompt = _SYSTEM_PROMPT + _factor_context(list(factor_keys or []))
+    history: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
     for msg in messages[-CHAT_MAX_MESSAGES:]:
         role = msg.get("role")
         content = msg.get("content")
@@ -48,11 +74,12 @@ async def run_agent_stream(
     messages: List[Dict[str, Any]],
     token_record: dict,
     request_id: str = "",
+    factor_keys: Optional[List[str]] = None,
 ) -> AsyncIterator[str]:
     yield _sse("meta", {"system": SYSTEM_NAME, "mode": "mock" if LLM_MOCK else "llm"})
 
     try:
-        history = _history_from(messages)
+        history = _history_from(messages, factor_keys=factor_keys)
     except ValueError as exc:
         yield _sse("error", {"message": str(exc)})
         return

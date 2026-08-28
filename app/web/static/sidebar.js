@@ -5,7 +5,8 @@
 
   const path = window.location.pathname;
   const items = [
-    { href: "/chat", label: "信号聊天", key: "chat" },
+    { href: "/chat", label: "Agent", key: "chat" },
+    { href: "/factors", label: "因子列表", key: "factors" },
     { href: "/keys", label: "Key 管理", key: "keys" },
     { href: "/subscription", label: "订阅", key: "subscription" },
   ];

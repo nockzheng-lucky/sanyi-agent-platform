@@ -4,9 +4,9 @@ const messagesEl = document.getElementById("messages");
 const signalFeedEl = document.getElementById("signalFeed");
 const signalEmptyEl = document.getElementById("signalEmpty");
 const signalCountEl = document.getElementById("signalCount");
-const factorListEl = document.getElementById("factorList");
-const factorEmptyEl = document.getElementById("factorEmpty");
-const factorCountEl = document.getElementById("factorCount");
+const loadedFactorBar = document.getElementById("loadedFactorBar");
+const loadedFactorChips = document.getElementById("loadedFactorChips");
+const clearLoadedFactorsBtn = document.getElementById("clearLoadedFactors");
 const loginCard = document.getElementById("loginCard");
 const chatCard = document.getElementById("chatCard");
 const needKeyBanner = document.getElementById("needKeyBanner");
@@ -39,7 +39,7 @@ function showChat(actor) {
     accountEl.textContent = `令牌：${actor.token.name} · 已用 ${actor.token.quotaUsed} / ${actor.token.quotaTotal === -1 ? "不限" : actor.token.quotaTotal}`;
   }
   loadLatestSignals();
-  loadFactors();
+  renderLoadedFactors();
   connectSignalStream();
 }
 
@@ -156,82 +156,44 @@ function refreshSignalEmptyState() {
   if (signalEmptyEl) signalEmptyEl.style.display = hasCards ? "none" : "block";
 }
 
-function refreshFactorEmptyState() {
-  const hasCards = factorListEl.querySelector(".factor-card") !== null;
-  if (factorEmptyEl) factorEmptyEl.style.display = hasCards ? "none" : "block";
-}
+const LOADED_FACTORS_KEY = "sanyi.loadedFactors";
 
-function factorCostText(factor) {
-  if (factor.cost === 0) return "订阅内";
-  return `${factor.cost} 点/次`;
-}
-
-function addFactorCard(factor) {
-  const card = document.createElement("div");
-  card.className = factor.status === "active" ? "factor-card" : "factor-card inactive";
-  card.title = factor.description || "";
-
-  const head = document.createElement("div");
-  head.className = "f-head";
-
-  const name = document.createElement("div");
-  name.className = "f-name";
-  name.textContent = factor.name || factor.factorKey;
-
-  const badge = document.createElement("span");
-  badge.className = factor.status === "active" ? "f-badge active" : "f-badge inactive";
-  badge.textContent = factor.status === "active" ? "可用" : "下线";
-  head.appendChild(name);
-  head.appendChild(badge);
-
-  const key = document.createElement("div");
-  key.className = "f-key";
-  key.textContent = factor.factorKey;
-
-  const desc = document.createElement("div");
-  desc.className = "f-desc";
-  desc.textContent = (factor.description || "").split("\n")[0];
-
-  const meta = document.createElement("div");
-  meta.className = "f-meta";
-  const tags = (factor.tags || []).slice(0, 3).join(" · ");
-  meta.textContent = [factorCostText(factor), tags].filter(Boolean).join(" · ");
-
-  card.appendChild(head);
-  card.appendChild(key);
-  if (desc.textContent) card.appendChild(desc);
-  card.appendChild(meta);
-
-  if (factor.status === "active") {
-    card.addEventListener("click", () => {
-      chatInput.value = `请用 factorKey=${factor.factorKey} 查询「${factor.name || factor.factorKey}」的最新结果并解读。`;
-      chatInput.focus();
-    });
-  }
-
-  factorListEl.appendChild(card);
-  refreshFactorEmptyState();
-}
-
-async function loadFactors() {
+function getLoadedFactors() {
   try {
-    const data = await api("/api/v1/factors");
-    const factors = (data && data.factors) || [];
-    factorListEl.querySelectorAll(".factor-card").forEach((el) => el.remove());
-    for (const factor of factors) addFactorCard(factor);
-    if (factorCountEl) factorCountEl.textContent = String(factors.length);
-    if (!factors.length && factorEmptyEl) {
-      factorEmptyEl.textContent = "暂无可用的因子。";
-      factorEmptyEl.style.display = "block";
-    }
-  } catch (err) {
-    if (factorEmptyEl) {
-      factorEmptyEl.textContent = `因子加载失败：${err.message}`;
-      factorEmptyEl.style.display = "block";
-    }
+    const value = JSON.parse(localStorage.getItem(LOADED_FACTORS_KEY) || "[]");
+    if (!Array.isArray(value)) return [];
+    return value.filter((item) => item && typeof item.factorKey === "string" && item.factorKey);
+  } catch (_e) {
+    return [];
   }
 }
 
+function getLoadedFactorKeys() {
+  return getLoadedFactors().map((item) => item.factorKey);
+}
+
+function renderLoadedFactors() {
+  if (!loadedFactorBar || !loadedFactorChips) return;
+  const factors = getLoadedFactors();
+  loadedFactorChips.textContent = "";
+  loadedFactorBar.classList.toggle("hidden", factors.length === 0);
+  for (const factor of factors) {
+    const chip = document.createElement("span");
+    chip.className = "lf-chip";
+    chip.textContent = factor.name || factor.factorKey;
+    chip.title = factor.factorKey;
+    loadedFactorChips.appendChild(chip);
+  }
+}
+
+function clearLoadedFactors() {
+  localStorage.removeItem(LOADED_FACTORS_KEY);
+  renderLoadedFactors();
+}
+
+if (clearLoadedFactorsBtn) {
+  clearLoadedFactorsBtn.addEventListener("click", clearLoadedFactors);
+}
 
 function firstDefined(...values) {
   for (const value of values) {
@@ -384,7 +346,7 @@ chatForm.addEventListener("submit", async (ev) => {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: history }),
+      body: JSON.stringify({ messages: history, factorKeys: getLoadedFactorKeys() }),
     });
     if (!resp.ok) {
       const body = await resp.json().catch(() => ({}));

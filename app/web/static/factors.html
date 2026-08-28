@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>因子列表 · 三易引擎</title>
+  <link rel="stylesheet" href="/chat/style.css" />
+</head>
+<body>
+  <main class="factor-page">
+    <div class="page-head">
+      <div>
+        <h2>因子列表</h2>
+        <p>把因子“加载到 Agent”后，回到 Agent 页面会看到已加载提醒，对话时会优先使用这些因子。</p>
+      </div>
+      <span id="loadedCount" class="loaded-count">已加载 0 个</span>
+    </div>
+    <div id="factorGrid" class="factor-grid">
+      <p id="factorEmpty" class="signal-empty">正在加载因子…</p>
+    </div>
+    <p id="factorError" class="form-error"></p>
+  </main>
+  <script src="/chat/factors.js"></script>
+  <script src="/chat/sidebar.js"></script>
+</body>
+</html>

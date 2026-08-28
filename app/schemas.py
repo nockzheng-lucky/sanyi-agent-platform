@@ -48,3 +48,5 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     requestId: Optional[str] = None
+    # 用户在“因子列表”页加载到 Agent 的因子；仅作为系统提示上下文，不绕过工具校验。
+    factorKeys: List[str] = Field(default_factory=list, max_length=20)
