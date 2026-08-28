@@ -218,7 +218,13 @@ function subscriptionFiltersText(filters) {
 }
 
 function subscriptionMatchTitle(match) {
-  return firstDefined(match.name, match.contract, match.symbol) || "未知合约";
+  const name = firstDefined(match.name);
+  const contract = firstDefined(match.contract);
+  const symbol = firstDefined(match.symbol);
+  if (contract && name && contract.indexOf(name) === -1) {
+    return name + " " + contract;
+  }
+  return contract || name || symbol || "未知合约";
 }
 
 function subscriptionMatchMeta(match) {
