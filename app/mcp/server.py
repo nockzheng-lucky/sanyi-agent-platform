@@ -57,7 +57,7 @@ def tool_definitions() -> List[Dict[str, Any]]:
             "name": "sanyi_evaluate_factor",
             "description": (
                 "按 factorKey 执行三易因子查询。常用 factorKey：dimen_gate_signal"
-                "（地门信号：地门开 / 地门形成·无动作门上，5m/15m/1h）。"
+                "（地门信号）、jue_direction（诀与破诀：80/20诀方向与破诀）。"
                 "params 的具体字段以 sanyi_list_factors 返回的 paramsSchema 为准。"
             ),
             "inputSchema": {

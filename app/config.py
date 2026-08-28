@@ -92,4 +92,11 @@ TRADING_SESSIONS = os.getenv(
 # 门信号允许的级别
 GATE_FREQUENCIES = ("5m", "15m", "1h")
 
+# 诀与破诀因子：qh 行情页的全品种诀方向 API（只读 HTTP，不直连业务库）。
+JUE_DIRECTION_URL = os.getenv(
+    "SANYI_JUE_DIRECTION_URL",
+    "https://qh.shhghf.com/api/market/jue-direction",
+).rstrip("/")
+JUE_DIRECTION_TIMEOUT_SECONDS = _int("SANYI_JUE_DIRECTION_TIMEOUT_SECONDS", 10)
+
 SYSTEM_NAME = "三易引擎 Agent 平台"

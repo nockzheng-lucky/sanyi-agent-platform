@@ -128,8 +128,18 @@ def _mock_once(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, An
             last_user = str(msg.get("content") or "")
             break
 
-    need_tool = bool(tools) and any(k in last_user for k in ("因子", "信号", "地门", "列表", "factor"))
+    need_tool = bool(tools) and any(
+        k in last_user for k in ("因子", "信号", "地门", "诀", "破诀", "列表", "factor")
+    )
     if need_tool:
+        if any(k in last_user for k in ("诀", "破诀", "jue")):
+            factor_key = "jue_direction"
+            params = {"limit": 20}
+            raw_arguments = "{\"factorKey\": \"jue_direction\", \"params\": {\"limit\": 20}}"
+        else:
+            factor_key = "dimen_gate_signal"
+            params = {"maxAgeMinutes": 120}
+            raw_arguments = "{\"factorKey\": \"dimen_gate_signal\", \"params\": {\"maxAgeMinutes\": 120}}"
         return {
             "content": "",
             "chunks": [],
@@ -137,11 +147,8 @@ def _mock_once(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, An
                 {
                     "id": "call_mock_1",
                     "name": "sanyi_evaluate_factor",
-                    "arguments": {
-                        "factorKey": "dimen_gate_signal",
-                        "params": {"maxAgeMinutes": 120},
-                    },
-                    "raw_arguments": "{\"factorKey\": \"dimen_gate_signal\", \"params\": {\"maxAgeMinutes\": 120}}",
+                    "arguments": {"factorKey": factor_key, "params": params},
+                    "raw_arguments": raw_arguments,
                 }
             ],
             "usage": {"input": 120, "output": 20},
