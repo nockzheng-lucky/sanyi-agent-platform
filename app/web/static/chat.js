@@ -215,18 +215,6 @@ function subscriptionFiltersText(filters) {
   if (Array.isArray(value.symbols) && value.symbols.length) {
     parts.push("品种：" + value.symbols.join("、"));
   }
-  if (Array.isArray(value.quotes) && value.quotes.length) {
-    parts.push("计价币：" + value.quotes.join("、"));
-  }
-  if (value.minChangePercent !== null && value.minChangePercent !== undefined) {
-    parts.push("24h涨跌 ≥ " + value.minChangePercent + "%");
-  }
-  if (value.maxChangePercent !== null && value.maxChangePercent !== undefined) {
-    parts.push("24h涨跌 ≤ " + value.maxChangePercent + "%");
-  }
-  if (value.minQuoteVolume !== null && value.minQuoteVolume !== undefined) {
-    parts.push("成交额 ≥ " + value.minQuoteVolume);
-  }
   if (value.maxAgeMinutes) parts.push("最近" + value.maxAgeMinutes + "分钟");
   if (value.limit) parts.push("最多" + value.limit + "条");
 

@@ -38,29 +38,7 @@ def build_tools(for_record: Optional[Dict[str, Any]] = None) -> List[Dict[str, A
         "symbols": {
             "type": ["array", "null"],
             "items": {"type": "string"},
-            "description": "品种过滤，例如 [\"AU0\"]；币圈用 [\"BTC_USDT\"]。",
-        },
-        "quotes": {
-            "type": ["array", "null"],
-            "items": {"type": "string"},
-            "description": "币圈计价币过滤，例如 [\"USDT\"]；null 表示清除。",
-        },
-        "minChangePercent": {
-            "type": ["number", "null"],
-            "minimum": -100,
-            "maximum": 100,
-            "description": "最小 24h 涨跌幅（%）；例如 3 表示只看涨超 3%。",
-        },
-        "maxChangePercent": {
-            "type": ["number", "null"],
-            "minimum": -100,
-            "maximum": 100,
-            "description": "最大 24h 涨跌幅（%）；例如 -3 表示只看跌超 3%。",
-        },
-        "minQuoteVolume": {
-            "type": ["number", "null"],
-            "minimum": 0,
-            "description": "最小计价币成交额，过滤低流动性交易对。",
+            "description": "品种或交易对过滤，例如 [\"AU0\"] / [\"BTCUSDT\"]；null 表示清除该限制。",
         },
         "states": {
             "type": ["array", "null"],
@@ -69,11 +47,8 @@ def build_tools(for_record: Optional[Dict[str, Any]] = None) -> List[Dict[str, A
         },
         "directions": {
             "type": ["array", "null"],
-            "items": {
-                "type": "string",
-                "enum": ["long", "short", "none", "up", "down", "flat"],
-            },
-            "description": "方向过滤；期货因子用 long/short/none，币圈因子用 up/down/flat。",
+            "items": {"type": "string", "enum": ["long", "short", "none"]},
+            "description": "方向过滤；long=多 / short=空 / none=无方向。",
         },
         "broken": {
             "type": ["boolean", "null"],

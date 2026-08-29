@@ -135,8 +135,8 @@ def _mock_once(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, An
         is_crypto = any(k in last_user for k in ("币圈", "加密", "BTC", "USDT", "crypto"))
         if is_crypto:
             factor_key = "crypto_market"
-            params = {"quotes": ["USDT"], "limit": 20}
-            raw_arguments = "{\"factorKey\": \"crypto_market\", \"params\": {\"quotes\": [\"USDT\"], \"limit\": 20}}"
+            params = {"limit": 20}
+            raw_arguments = "{\"factorKey\": \"crypto_market\", \"params\": {\"limit\": 20}}"
         elif any(k in last_user for k in ("诀", "破诀", "jue")):
             factor_key = "jue_direction"
             params = {"limit": 20}
@@ -150,8 +150,8 @@ def _mock_once(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, An
         # 本地 MOCK 也演示“自然语言调整筛选条件”：先存 filters，再执行查询。
         if any(k in last_user for k in ("只看", "只要", "筛选", "保留", "改成", "调整为")):
             if is_crypto:
-                filters = {"quotes": ["USDT"]}
-                filter_raw = "{\"factorKey\": \"%s\", \"filters\": {\"quotes\": [\"USDT\"]}}" % factor_key
+                filters = {"frequencies": ["15m", "1h"]}
+                filter_raw = "{\"factorKey\": \"%s\", \"filters\": {\"frequencies\": [\"15m\", \"1h\"]}}" % factor_key
             else:
                 freq = "15m" if ("15分钟" in last_user or "15 分钟" in last_user) else ("5m" if ("5分钟" in last_user or "5 分钟" in last_user) else "1h")
                 filters = {"frequencies": [freq]}

@@ -9,11 +9,42 @@ from app.factors.base import FactorContext
 
 crypto_module = importlib.import_module("app.factors.crypto_market")
 
-TICKERS = [
-    {"currency_pair": "BTC_USDT", "last": "65000", "change_percentage": "4.2", "quote_volume": "1000000", "high_24h": "66000", "low_24h": "62000", "base_volume": "15", "highest_bid": "64999", "lowest_ask": "65001"},
-    {"currency_pair": "ETH_USDT", "last": "3200", "change_percentage": "-2.1", "quote_volume": "500000", "high_24h": "3300", "low_24h": "3100", "base_volume": "160", "highest_bid": "3199", "lowest_ask": "3201"},
-    {"currency_pair": "DOGE_USDT", "last": "0.12", "change_percentage": "0", "quote_volume": "10000", "high_24h": "0.13", "low_24h": "0.11", "base_volume": "80000", "highest_bid": "0.119", "lowest_ask": "0.121"},
-]
+PAYLOAD = {
+    "updated_at": "2026-08-29T04:10:00+00:00",
+    "contracts": 2,
+    "matched_cells": 5,
+    "state_rules": [
+        {"state": "80诀", "thr": 80, "broken": False, "direction": "long", "side": "多"},
+        {"state": "80诀破诀", "thr": 80, "broken": True, "direction": "short", "side": "空"},
+        {"state": "20诀", "thr": 20, "broken": False, "direction": "short", "side": "空"},
+        {"state": "20诀破诀", "thr": 20, "broken": True, "direction": "long", "side": "多"},
+        {"state": "无诀", "thr": None, "broken": False, "direction": None, "side": None},
+    ],
+    "sectors": [
+        {
+            "name": "Layer1",
+            "items": [
+                {
+                    "sym": "BTCUSDT",
+                    "name": "BTC",
+                    "label": "BTC",
+                    "cells": [
+                        {"freq": "15m", "state": "20诀破诀", "direction": "long", "side": "多", "thr": 20, "price": 77800.0, "broken": True, "gap": False, "pending": False, "rsi3": 31.0, "walk_state": "走2", "walk_code": "2", "walk_mark": "20破·走2", "pair_confirm_prev": False, "pair_confirm_next": False},
+                        {"freq": "1h", "state": "80诀", "direction": "long", "side": "多", "thr": 80, "price": 78000.0, "broken": False, "gap": False, "pending": False, "rsi3": 42.0, "walk_state": "走1", "walk_code": "1", "walk_mark": "", "pair_confirm_prev": False, "pair_confirm_next": False},
+                    ],
+                },
+                {
+                    "sym": "ETHUSDT",
+                    "name": "ETH",
+                    "label": "ETH",
+                    "cells": [
+                        {"freq": "5m", "state": "80诀破诀", "direction": "short", "side": "空", "thr": 80, "price": 2900.0, "broken": True, "gap": False, "pending": False, "rsi3": 66.0, "walk_state": "走B", "walk_code": "B", "walk_mark": "80破·走B", "pair_confirm_prev": False, "pair_confirm_next": False},
+                    ],
+                },
+            ],
+        }
+    ],
+}
 
 
 def _shadow_key_record():
@@ -50,9 +81,9 @@ def test_shadow_factor_hidden_from_normal_users(client, token_headers):
 
 def test_shadow_user_sees_and_evaluates_crypto(client, monkeypatch):
     async def fake_fetch(*args, **kwargs):
-        return TICKERS
+        return PAYLOAD
 
-    monkeypatch.setattr(crypto_module, "_fetch_tickers", fake_fetch)
+    monkeypatch.setattr(crypto_module, "_fetch_payload", fake_fetch)
 
     user, key, record = _shadow_key_record()
     raw_session = create_user_session(user["id"])
@@ -70,37 +101,46 @@ def test_shadow_user_sees_and_evaluates_crypto(client, monkeypatch):
     resp = client.post(
         "/api/v1/factors/evaluate",
         headers={"X-API-Token": key["token"]},
-        json={"factorKey": "crypto_market", "params": {"quotes": ["USDT"], "limit": 10}},
+        json={
+            "factorKey": "crypto_market",
+            "params": {"frequencies": ["15m"], "states": ["20诀破诀"], "walkCodes": ["2"], "limit": 10},
+        },
     )
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["factorKey"] == "crypto_market"
-    assert data["details"]["matchedSymbols"] == 3
-    assert data["details"]["coins"][0]["symbol"] == "BTC_USDT"  # 按绝对涨跌幅排序
+    assert data["details"]["matchedCells"] == 1
+    assert data["details"]["cells"][0]["symbol"] == "BTCUSDT"
+    assert data["details"]["cells"][0]["walkCode"] == "2"
 
 
 @pytest.mark.asyncio
 async def test_crypto_factor_filter_direction(monkeypatch):
     async def fake_fetch(*args, **kwargs):
-        return TICKERS
+        return PAYLOAD
 
-    monkeypatch.setattr(crypto_module, "_fetch_tickers", fake_fetch)
+    monkeypatch.setattr(crypto_module, "_fetch_payload", fake_fetch)
     result = await crypto_module.crypto_market.handler(
-        {"directions": ["down"], "limit": 10},
+        {"directions": ["short"], "limit": 10},
         FactorContext(token_id=1),
     )
-    assert result["details"]["matchedSymbols"] == 1
-    assert result["details"]["coins"][0]["symbol"] == "ETH_USDT"
+    assert result["details"]["matchedCells"] == 1
+    assert result["details"]["cells"][0]["symbol"] == "ETHUSDT"
 
 
 def test_shadow_subscription_creation(client, monkeypatch):
     async def fake_fetch(*args, **kwargs):
-        return TICKERS
+        return PAYLOAD
 
-    monkeypatch.setattr(crypto_module, "_fetch_tickers", fake_fetch)
+    monkeypatch.setattr(crypto_module, "_fetch_payload", fake_fetch)
     from app.signal_subscriptions import create_signal_subscription
 
     user, key, record = _shadow_key_record()
-    created = create_signal_subscription(record, "crypto_market", {"quotes": ["USDT"], "limit": 10}, "BTC 异动")
+    created = create_signal_subscription(
+        record,
+        "crypto_market",
+        {"frequencies": ["15m"], "states": ["20诀破诀"], "walkCodes": ["2"], "limit": 10},
+        "BTC 20诀破诀·走2",
+    )
     assert created["factorKey"] == "crypto_market"
     assert registry.get("crypto_market").shadow_only is True

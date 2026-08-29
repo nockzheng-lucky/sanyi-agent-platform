@@ -102,8 +102,12 @@ JUE_DIRECTION_URL = os.getenv(
 ).rstrip("/")
 JUE_DIRECTION_TIMEOUT_SECONDS = _int("SANYI_JUE_DIRECTION_TIMEOUT_SECONDS", 10)
 
-# 币圈行情因子（影子模式专用）：数据源由 Owner 提供，未配置时因子返回明确错误。
-CRYPTO_TICKERS_URL = os.getenv("SANYI_CRYPTO_TICKERS_URL", "").strip().rstrip("/")
+# 币圈诀与破诀因子（影子模式专用）：东京币圈服务器 sanyi-bybit-tokyo-01。
+CRYPTO_JUE_URL = os.getenv(
+    "SANYI_CRYPTO_JUE_DIRECTION_URL",
+    "https://167.179.69.189/api/market/jue-direction",
+).strip().rstrip("/")
+CRYPTO_VERIFY_SSL = _bool("SANYI_CRYPTO_VERIFY_SSL", False)  # 该服务器证书不匹配 IP，暂用 IP 直连
 CRYPTO_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_TIMEOUT_SECONDS", 10)
 
 SYSTEM_NAME = "三易引擎 Agent 平台"
