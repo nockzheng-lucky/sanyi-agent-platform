@@ -78,6 +78,7 @@ python -m app.mcp
 - [x] 页面 Agent（DeepSeek/OpenAI 兼容 function calling）
 - [x] 因子列表 + 加载到 Agent + 自然语言组合/调整筛选条件
 - [x] 持续信号订阅：Agent 确认后，聊天页左侧订阅面板持续显示匹配信号
+- [x] Pushplus 推送：按订阅动态推送新匹配信号（token 配置后启用）
 - [x] 因子：地门信号 `dimen_gate_signal`、诀与破诀 `jue_direction`
 - [x] 影子模式：158 管理员专属币圈行情因子 `crypto_market`
 - [x] `SANYI_GATE_EVENTS_DB` 接生产 SQLite 联调

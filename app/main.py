@@ -8,27 +8,35 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import admin, auth, chat, factors, health, keys, mcp, signal_subscriptions, signals, subscription, tokens
-from .config import SIGNAL_POLL_ENABLED, SYSTEM_NAME
+from .config import PUSHPLUS_ENABLED, PUSHPLUS_TOKEN, SIGNAL_POLL_ENABLED, SYSTEM_NAME
 from .db import authenticate, create_session, init_db
 from .engine.poller import SignalPoller
+from .engine.subscription_pusher import SubscriptionPusher
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     poller_task = None
+    pusher_task = None
     if SIGNAL_POLL_ENABLED:
         poller = SignalPoller()
         poller_task = asyncio.create_task(poller.run())
+    if PUSHPLUS_ENABLED and PUSHPLUS_TOKEN:
+        pusher = SubscriptionPusher()
+        pusher_task = asyncio.create_task(pusher.run())
     try:
         yield
     finally:
-        if poller_task is not None:
-            poller_task.cancel()
-            try:
-                await poller_task
-            except asyncio.CancelledError:
-                pass
+        for task in (poller_task, pusher_task):
+            if task is not None:
+                task.cancel()
+        for task in (poller_task, pusher_task):
+            if task is not None:
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
 
 app = FastAPI(title=SYSTEM_NAME, version="0.1.0", lifespan=lifespan)

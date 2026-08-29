@@ -166,6 +166,15 @@ CREATE TABLE IF NOT EXISTS signal_subscriptions (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS subscription_match_keys (
+    subscription_id INTEGER NOT NULL,
+    match_key TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    last_pushed_at TEXT,
+    PRIMARY KEY (subscription_id, match_key)
+);
 """
 
 _local = threading.local()

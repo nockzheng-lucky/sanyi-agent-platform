@@ -71,6 +71,14 @@ def list_signal_subscriptions(user_id: int, include_inactive: bool = False) -> L
     return [_to_dict(r) for r in rows]
 
 
+def list_all_active_signal_subscriptions() -> List[Dict[str, Any]]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM signal_subscriptions WHERE status = 'active' ORDER BY id ASC"
+    ).fetchall()
+    return [_to_dict(r) for r in rows]
+
+
 def delete_signal_subscription(user_id: int, subscription_id: int) -> bool:
     conn = get_conn()
     cur = conn.execute(
@@ -90,6 +98,7 @@ def _to_dict(row: Any) -> Dict[str, Any]:
         filters = {}
     return {
         "id": rec["id"],
+        "userId": rec["user_id"],
         "factorKey": rec["factor_key"],
         "filters": filters,
         "name": rec.get("name"),
