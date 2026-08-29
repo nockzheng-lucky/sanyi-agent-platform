@@ -110,9 +110,8 @@ CRYPTO_JUE_URL = os.getenv(
 CRYPTO_VERIFY_SSL = _bool("SANYI_CRYPTO_VERIFY_SSL", False)  # 该服务器证书不匹配 IP，暂用 IP 直连
 CRYPTO_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_TIMEOUT_SECONDS", 10)
 
-# Pushplus 推送：token 未配置时不启动推送 worker。
+# Pushplus 推送：token 是用户级配置（user_push_channels 表），不使用全局 token。
 PUSHPLUS_ENABLED = _bool("SANYI_PUSHPLUS_ENABLED", True)
-PUSHPLUS_TOKEN = os.getenv("SANYI_PUSHPLUS_TOKEN", "").strip()
 PUSHPLUS_URL = os.getenv("SANYI_PUSHPLUS_URL", "https://www.pushplus.plus/send").strip()
 SIGNAL_SUBSCRIPTION_PUSH_SECONDS = _int("SANYI_SIGNAL_SUBSCRIPTION_PUSH_SECONDS", 60)
 

@@ -12,13 +12,10 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from ..config import (
-    PUSHPLUS_TOKEN,
-    PUSHPLUS_URL,
-    SIGNAL_SUBSCRIPTION_PUSH_SECONDS,
-)
+from ..config import PUSHPLUS_URL, SIGNAL_SUBSCRIPTION_PUSH_SECONDS
 from ..db import _now_iso, get_conn
 from ..factor_registry import registry
+from ..push_channels import get_pushplus_token
 from ..signal_subscriptions import list_all_active_signal_subscriptions
 
 
@@ -140,8 +137,8 @@ def _build_push(title_prefix: str, sub: Dict[str, Any], matches: List[Dict[str, 
     return title, "\n".join(lines)
 
 
-async def send_pushplus(title: str, content: str, token: str = "") -> bool:
-    token = (token or PUSHPLUS_TOKEN).strip()
+async def send_pushplus(title: str, content: str, token: str) -> bool:
+    token = (token or "").strip()
     if not token:
         return False
     payload = {
@@ -164,11 +161,12 @@ class SubscriptionPusher:
         self.title_prefix = title_prefix
 
     async def run_once(self) -> int:
-        if not PUSHPLUS_TOKEN:
-            return 0
         sent = 0
         now = _now_iso()
         for sub in list_all_active_signal_subscriptions():
+            token = get_pushplus_token(int(sub["userId"]))
+            if not token:
+                continue
             try:
                 result = await registry.evaluate(
                     token_record=_actor_for_user(int(sub["userId"])),
@@ -190,7 +188,7 @@ class SubscriptionPusher:
                 if not pending:
                     continue
                 title, content = _build_push(self.title_prefix, sub, pending)
-                if await send_pushplus(title, content):
+                if await send_pushplus(title, content, token=token):
                     mark_pushed(sub["id"], pending_keys, now)
                     sent += 1
             except Exception as exc:  # noqa: BLE001 - 单个订阅失败不阻塞其他订阅

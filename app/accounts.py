@@ -234,6 +234,19 @@ def _fernet() -> Fernet:
     return Fernet(base64.urlsafe_b64encode(key_material))
 
 
+def encrypt_secret(value: str) -> str:
+    return _fernet().encrypt(str(value).encode("utf-8")).decode("ascii")
+
+
+def decrypt_secret(value: str) -> Optional[str]:
+    if not value:
+        return None
+    try:
+        return _fernet().decrypt(value.encode("ascii")).decode("utf-8")
+    except InvalidToken:
+        return None
+
+
 def _key_active(rec: Dict[str, Any]) -> bool:
     if rec.get("status") != "active":
         return False

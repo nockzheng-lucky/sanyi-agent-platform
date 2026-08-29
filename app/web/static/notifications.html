@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>消息通知 · 三易引擎</title>
+  <link rel="stylesheet" href="/chat/style.css" />
+</head>
+<body>
+  <main class="auth-card">
+    <h2>消息通知</h2>
+    <p id="pushplusStatus" class="hint">正在读取绑定状态…</p>
+    <form id="pushplusForm" class="auth-form">
+      <label class="field-label">Pushplus token</label>
+      <input id="pushplusToken" placeholder="在 pushplus.plus 获取你的 token" autocomplete="off" />
+      <button type="submit" id="bindBtn">绑定 / 更换</button>
+    </form>
+    <button id="unbindBtn" type="button" class="side-logout">解绑 Pushplus</button>
+    <p id="pushplusError" class="form-error"></p>
+    <p id="pushplusHint" class="form-hint"></p>
+    <p class="hint small">token 只属于你的账户，加密存储；平台不会使用其他人的 token 给你推送。</p>
+  </main>
+  <script src="/chat/notifications.js"></script>
+  <script src="/chat/sidebar.js"></script>
+</body>
+</html>

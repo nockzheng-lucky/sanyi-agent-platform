@@ -9,6 +9,7 @@
     { href: "/factors", label: "因子列表", key: "factors" },
     { href: "/keys", label: "Key 管理", key: "keys" },
     { href: "/subscription", label: "订阅", key: "subscription" },
+    { href: "/notifications", label: "消息通知", key: "notifications" },
   ];
 
   const aside = document.createElement("aside");

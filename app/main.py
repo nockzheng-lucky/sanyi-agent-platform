@@ -7,8 +7,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import admin, auth, chat, factors, health, keys, mcp, signal_subscriptions, signals, subscription, tokens
-from .config import PUSHPLUS_ENABLED, PUSHPLUS_TOKEN, SIGNAL_POLL_ENABLED, SYSTEM_NAME
+from .api import admin, auth, chat, factors, health, keys, mcp, notifications, signal_subscriptions, signals, subscription, tokens
+from .config import PUSHPLUS_ENABLED, SIGNAL_POLL_ENABLED, SYSTEM_NAME
 from .db import authenticate, create_session, init_db
 from .engine.poller import SignalPoller
 from .engine.subscription_pusher import SubscriptionPusher
@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     if SIGNAL_POLL_ENABLED:
         poller = SignalPoller()
         poller_task = asyncio.create_task(poller.run())
-    if PUSHPLUS_ENABLED and PUSHPLUS_TOKEN:
+    if PUSHPLUS_ENABLED:
         pusher = SubscriptionPusher()
         pusher_task = asyncio.create_task(pusher.run())
     try:
@@ -54,6 +54,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(notifications.router)
 app.include_router(admin.router)
 app.include_router(keys.router)
 app.include_router(subscription.router)
@@ -116,6 +117,11 @@ async def privacy_page():
 @app.get("/subscription", include_in_schema=False)
 async def subscription_page():
     return FileResponse(_web_dir / "subscription.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/notifications", include_in_schema=False)
+async def notifications_page():
+    return FileResponse(_web_dir / "notifications.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/chat", include_in_schema=False)

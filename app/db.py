@@ -175,6 +175,17 @@ CREATE TABLE IF NOT EXISTS subscription_match_keys (
     last_pushed_at TEXT,
     PRIMARY KEY (subscription_id, match_key)
 );
+
+CREATE TABLE IF NOT EXISTS user_push_channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    token_encrypted TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(user_id, provider)
+);
 """
 
 _local = threading.local()

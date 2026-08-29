@@ -2,9 +2,10 @@ import uuid
 
 import pytest
 
-from app.accounts import create_user, issue_user_key
+from app.accounts import create_user, create_user_session, issue_user_key
 from app.db import upsert_signal_event
 from app.engine import subscription_pusher as pusher_module
+from app.push_channels import set_pushplus_token
 from app.signal_subscriptions import create_signal_subscription
 
 
@@ -38,13 +39,14 @@ async def test_subscription_pusher_dynamic_content(monkeypatch):
         "PUSHAU 5分钟开门",
     )
 
+    set_pushplus_token(user["id"], "user-own-pushplus-token")
     sent = []
 
     async def fake_send(title, content, token=""):
+        assert token == "user-own-pushplus-token"
         sent.append({"title": title, "content": content})
         return True
 
-    monkeypatch.setattr(pusher_module, "PUSHPLUS_TOKEN", "test-push-token")
     monkeypatch.setattr(pusher_module, "send_pushplus", fake_send)
 
     pusher = pusher_module.SubscriptionPusher()
@@ -66,3 +68,28 @@ async def test_subscription_pusher_dynamic_content(monkeypatch):
     assert await pusher.run_once() == 1
     assert "PUSHAG" in sent[0]["content"]
     assert "新增 1 条信号" in sent[0]["title"]
+
+
+def test_pushplus_bind_status_unbind_api(client):
+    phone = "134" + uuid.uuid4().hex[:8]
+    user = create_user(phone, "password123")
+    session = create_user_session(user["id"])
+    client.cookies.set("sanyi_user", session)
+
+    resp = client.get("/api/v1/notifications/pushplus")
+    assert resp.status_code == 200
+    assert resp.json()["data"]["pushplus"] is None
+
+    resp = client.post("/api/v1/notifications/pushplus", json={"token": "abcdef1234567890abcdef1234567890"})
+    assert resp.status_code == 200
+    channel = resp.json()["data"]["pushplus"]
+    assert channel["tokenMasked"].startswith("abcdef")
+    assert "7890" in channel["tokenMasked"]
+    assert "abcdef1234567890abcdef1234567890" not in resp.text
+
+    resp = client.get("/api/v1/notifications/pushplus")
+    assert resp.json()["data"]["pushplus"]["tokenMasked"] == channel["tokenMasked"]
+
+    resp = client.delete("/api/v1/notifications/pushplus")
+    assert resp.status_code == 200
+    assert client.get("/api/v1/notifications/pushplus").json()["data"]["pushplus"] is None
