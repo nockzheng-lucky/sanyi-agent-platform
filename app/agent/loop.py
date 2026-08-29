@@ -43,11 +43,14 @@ def _sse(event: str, data: Any) -> str:
     return "event: %s\ndata: %s\n\n" % (event, json.dumps(data, ensure_ascii=False, default=str))
 
 
-def _factor_context(factor_keys: List[str]) -> str:
+def _factor_context(
+    factor_keys: List[str],
+    for_record: Optional[Dict[str, Any]] = None,
+) -> str:
     """把用户在因子列表页加载的因子变成系统提示，Agent 会优先使用它们。"""
     if not factor_keys:
         return ""
-    descriptors = {d["factorKey"]: d for d in registry.descriptors()}
+    descriptors = {d["factorKey"]: d for d in registry.descriptors(for_record=for_record)}
     loaded = []
     for key in factor_keys:
         key = str(key or "").strip()
@@ -84,10 +87,11 @@ def _history_from(
     messages: List[Dict[str, Any]],
     factor_keys: Optional[List[str]] = None,
     filter_state: Optional[Dict[str, Any]] = None,
+    token_record: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     system_prompt = (
         _SYSTEM_PROMPT
-        + _factor_context(list(factor_keys or []))
+        + _factor_context(list(factor_keys or []), for_record=token_record)
         + _filters_context(filter_state)
     )
     history: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
@@ -115,6 +119,7 @@ async def run_agent_stream(
             messages,
             factor_keys=factor_keys,
             filter_state=filter_state,
+            token_record=token_record,
         )
     except ValueError as exc:
         yield _sse("error", {"message": str(exc)})
@@ -123,7 +128,7 @@ async def run_agent_stream(
     total_usage = {"input": 0, "output": 0}
     try:
         for round_no in range(CHAT_MAX_TOOL_ROUNDS):
-            agg = await chat_once(history, tools=build_tools())
+            agg = await chat_once(history, tools=build_tools(for_record=token_record))
             total_usage["input"] += int(agg.get("usage", {}).get("input") or 0)
             total_usage["output"] += int(agg.get("usage", {}).get("output") or 0)
 

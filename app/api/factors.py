@@ -14,7 +14,7 @@ async def list_factors(token: dict = Depends(get_token_or_user_session)):
     外部 Agent 走 X-API-Token/Bearer；页面用户凭登录会话也可读取，
     但执行因子仍需要有效 Key / 订阅。
     """
-    return ApiResponse(data={"factors": registry.descriptors()})
+    return ApiResponse(data={"factors": registry.descriptors(for_record=token)})
 
 
 @router.post("/factors/evaluate", response_model=ApiResponse)

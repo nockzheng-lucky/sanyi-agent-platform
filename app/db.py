@@ -211,6 +211,8 @@ def init_db() -> None:
         conn.execute("ALTER TABLE users ADD COLUMN subscription_plan TEXT")
     if "subscription_expires_at" not in user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN subscription_expires_at TEXT")
+    if "shadow_mode" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN shadow_mode INTEGER NOT NULL DEFAULT 0")
     key_cols = [r["name"] for r in conn.execute("PRAGMA table_info(user_keys)").fetchall()]
     if "token_encrypted" not in key_cols:
         conn.execute("ALTER TABLE user_keys ADD COLUMN token_encrypted TEXT")

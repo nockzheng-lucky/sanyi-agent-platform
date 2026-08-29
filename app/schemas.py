@@ -25,6 +25,7 @@ class FactorDescriptor(BaseModel):
     riskNote: str
     status: str = "active"
     tags: List[str] = Field(default_factory=list)
+    shadowOnly: bool = False
 
 
 class FactorEvaluateRequest(BaseModel):

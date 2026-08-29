@@ -16,7 +16,7 @@ class RegistryFactorGateway:
         self.token_record = token_record
 
     async def list_factors(self) -> List[Dict[str, Any]]:
-        return registry.descriptors()
+        return registry.descriptors(for_record=self.token_record)
 
     async def evaluate_factor(
         self,

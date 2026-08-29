@@ -143,6 +143,7 @@ function firstDefined(...values) {
 const FACTOR_LABELS = {
   dimen_gate_signal: "地门信号",
   jue_direction: "诀与破诀",
+  crypto_market: "币圈行情",
 };
 
 const FREQUENCY_LABELS = {
@@ -158,6 +159,9 @@ const DIRECTION_LABELS = {
   long: "多",
   short: "空",
   none: "无方向",
+  up: "上涨",
+  down: "下跌",
+  flat: "平盘",
 };
 
 const GATE_STATUS_LABELS = {
@@ -209,10 +213,22 @@ function subscriptionFiltersText(filters) {
     parts.push(value.directions.map(directionLabel).join("/"));
   }
   if (Array.isArray(value.symbols) && value.symbols.length) {
-    parts.push(`品种：${value.symbols.join("、")}`);
+    parts.push("品种：" + value.symbols.join("、"));
   }
-  if (value.maxAgeMinutes) parts.push(`最近${value.maxAgeMinutes}分钟`);
-  if (value.limit) parts.push(`最多${value.limit}条`);
+  if (Array.isArray(value.quotes) && value.quotes.length) {
+    parts.push("计价币：" + value.quotes.join("、"));
+  }
+  if (value.minChangePercent !== null && value.minChangePercent !== undefined) {
+    parts.push("24h涨跌 ≥ " + value.minChangePercent + "%");
+  }
+  if (value.maxChangePercent !== null && value.maxChangePercent !== undefined) {
+    parts.push("24h涨跌 ≤ " + value.maxChangePercent + "%");
+  }
+  if (value.minQuoteVolume !== null && value.minQuoteVolume !== undefined) {
+    parts.push("成交额 ≥ " + value.minQuoteVolume);
+  }
+  if (value.maxAgeMinutes) parts.push("最近" + value.maxAgeMinutes + "分钟");
+  if (value.limit) parts.push("最多" + value.limit + "条");
 
   return parts.length ? parts.join(" · ") : "全部信号";
 }
@@ -237,6 +253,10 @@ function subscriptionMatchMeta(match) {
   if (state) parts.push(signalStatusLabel(state));
   if (walk) parts.push(`走${walk}`);
   if (direction) parts.push(directionLabel(direction));
+  if (match.changePercent !== null && match.changePercent !== undefined) {
+    const prefix = Number(match.changePercent) > 0 ? "+" : "";
+    parts.push(prefix + match.changePercent + "%");
+  }
   return parts.join(" · ");
 }
 

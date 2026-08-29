@@ -8,7 +8,7 @@ MCP/REST 复用同一套 factor schema，保证行为一致。
 持久化条件；后续 evaluate 会自动合并这些条件，当次显式参数优先。
 """
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 
@@ -27,8 +27,8 @@ from .filter_store import (
 )
 
 
-def build_tools() -> List[Dict[str, Any]]:
-    factor_keys = [d["factorKey"] for d in registry.descriptors()]
+def build_tools(for_record: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    factor_keys = [d["factorKey"] for d in registry.descriptors(for_record=for_record)]
     filter_fields: Dict[str, Any] = {
         "frequencies": {
             "type": ["array", "null"],
@@ -38,7 +38,29 @@ def build_tools() -> List[Dict[str, Any]]:
         "symbols": {
             "type": ["array", "null"],
             "items": {"type": "string"},
-            "description": "品种过滤，例如 [\"AU0\"]；null 表示清除该限制。",
+            "description": "品种过滤，例如 [\"AU0\"]；币圈用 [\"BTC_USDT\"]。",
+        },
+        "quotes": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+            "description": "币圈计价币过滤，例如 [\"USDT\"]；null 表示清除。",
+        },
+        "minChangePercent": {
+            "type": ["number", "null"],
+            "minimum": -100,
+            "maximum": 100,
+            "description": "最小 24h 涨跌幅（%）；例如 3 表示只看涨超 3%。",
+        },
+        "maxChangePercent": {
+            "type": ["number", "null"],
+            "minimum": -100,
+            "maximum": 100,
+            "description": "最大 24h 涨跌幅（%）；例如 -3 表示只看跌超 3%。",
+        },
+        "minQuoteVolume": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "最小计价币成交额，过滤低流动性交易对。",
         },
         "states": {
             "type": ["array", "null"],
@@ -47,8 +69,11 @@ def build_tools() -> List[Dict[str, Any]]:
         },
         "directions": {
             "type": ["array", "null"],
-            "items": {"type": "string", "enum": ["long", "short", "none"]},
-            "description": "方向过滤；null 表示清除该限制。",
+            "items": {
+                "type": "string",
+                "enum": ["long", "short", "none", "up", "down", "flat"],
+            },
+            "description": "方向过滤；期货因子用 long/short/none，币圈因子用 up/down/flat。",
         },
         "broken": {
             "type": ["boolean", "null"],
@@ -211,7 +236,7 @@ async def execute_tool(name: str, arguments: Dict[str, Any], token_record: dict)
     try:
         if name == "sanyi_list_factors":
             return {
-                "factors": registry.descriptors(),
+                "factors": registry.descriptors(for_record=token_record),
                 "currentFilters": get_filter_state(token_record),
             }
 

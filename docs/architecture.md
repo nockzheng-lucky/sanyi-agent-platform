@@ -58,6 +58,7 @@ sanyi green gate_events.sqlite3（只读）
 - `app/factor_registry.py`：因子的单一事实来源；页面 Agent 与未来 MCP/REST 共用。
 - `app/factors/dimen_gate_signal.py`：门信号因子；不重算引擎，只读事件。
 - `app/factors/jue_direction.py`：诀与破诀因子；只读 qh HTTP API。
+- `app/factors/crypto_market.py`：币圈行情因子；`shadow_only=True`，只对影子模式账号可见。
 - `app/engine/gate_reader.py`：只读 gate_events.sqlite3，按当天交易日筛选目标信号。
 - `app/engine/poller.py`：交易时段轮询 + event_id 去重 + 新事件写入。
 - `app/db.py`：令牌哈希、额度、日志、会话、signal_events、agent_filters；原型用 SQLite。

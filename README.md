@@ -31,6 +31,7 @@ Skill（`docs/factors/`）三层开放。
   - `app/factor_registry.py`：因子注册表（单一事实来源）
   - `app/factors/dimen_gate_signal.py`：地门信号因子（读取事件，不重算引擎）
   - `app/factors/jue_direction.py`：诀与破诀因子（qh 全品种诀方向）
+    - `app/factors/crypto_market.py`：币圈行情因子（影子模式专用）
   - `app/engine/`：门信号读取、交易时段、轮询、SSE 总线（供外部接入）
   - `app/agent/filter_store.py`：Agent 自然语言筛选条件存储
   - `app/api/`：健康检查、令牌、因子、信号事件、聊天接口
@@ -39,6 +40,7 @@ Skill（`docs/factors/`）三层开放。
   - `app/web/`：聊天页面静态资源
 - `docs/`：架构、安全合规、MCP 接入说明、Skill 文档
 - `scripts/create_token.py`：签发测试令牌
+- `scripts/set_shadow_mode.py`：设置影子模式账号
 - `tests/`：骨架冒烟测试
 
 ## 快速启动
@@ -77,6 +79,7 @@ python -m app.mcp
 - [x] 因子列表 + 加载到 Agent + 自然语言组合/调整筛选条件
 - [x] 持续信号订阅：Agent 确认后，聊天页左侧订阅面板持续显示匹配信号
 - [x] 因子：地门信号 `dimen_gate_signal`、诀与破诀 `jue_direction`
+- [x] 影子模式：158 管理员专属币圈行情因子 `crypto_market`
 - [x] `SANYI_GATE_EVENTS_DB` 接生产 SQLite 联调
 - [x] 真实 LLM 联调（DeepSeek key 到位后填 `.env`）
 - [x] MCP stdio 服务端 + Skill 文档（REST / MCP / Skill 三层开放）

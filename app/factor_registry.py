@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException
 from jsonschema import Draft7Validator, ValidationError
 
-from .accounts import charge_user_key
+from .accounts import charge_user_key, is_shadow_mode
 from .db import charge_after_success, log_usage
 from .factors import FACTOR_SPECS, FactorSpec
 from .factors.base import FactorContext, now_iso
@@ -31,10 +31,23 @@ class FactorRegistry:
         Draft7Validator.check_schema(spec.output_schema)
         self._specs[spec.factor_key] = spec
 
-    def descriptors(self, include_inactive: bool = False) -> List[Dict[str, Any]]:
+    def _visible(self, spec: FactorSpec, for_record: Optional[dict]) -> bool:
+        if spec.status != "active":
+            return False
+        if spec.shadow_only and (for_record is None or not is_shadow_mode(for_record)):
+            return False
+        return True
+
+    def descriptors(
+        self,
+        include_inactive: bool = False,
+        for_record: Optional[dict] = None,
+    ) -> List[Dict[str, Any]]:
         out = []
         for spec in self._specs.values():
-            if spec.status != "active" and not include_inactive:
+            if not include_inactive and spec.status != "active":
+                continue
+            if spec.shadow_only and (for_record is None or not is_shadow_mode(for_record)):
                 continue
             out.append(spec.descriptor())
         return out
@@ -84,6 +97,12 @@ class FactorRegistry:
             raise HTTPException(
                 status_code=403,
                 detail={"code": 403, "message": "因子已下线：%s" % factor_key, "data": None},
+            )
+        if spec.shadow_only and not is_shadow_mode(token_record):
+            # 对普通用户隐藏影子因子的存在。
+            raise HTTPException(
+                status_code=404,
+                detail={"code": 404, "message": "因子不存在：%s" % factor_key, "data": None},
             )
 
         params = self.validate_params(spec, params)

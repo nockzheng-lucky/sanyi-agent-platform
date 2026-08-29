@@ -6,6 +6,7 @@ Agent 在用户确认后调用 sanyi_create_subscription 创建订阅；
 import json
 from typing import Any, Dict, List, Optional
 
+from .accounts import is_shadow_mode
 from .db import _now_iso, get_conn
 from .factor_registry import registry
 
@@ -27,6 +28,8 @@ def create_signal_subscription(
     factor_key = str(factor_key or "").strip()
     spec = registry.get(factor_key)
     if spec is None:
+        raise ValueError("因子不存在：%s" % factor_key)
+    if spec.shadow_only and not is_shadow_mode(token_record):
         raise ValueError("因子不存在：%s" % factor_key)
     filters = registry.validate_params(spec, filters or {})
     if not filters:

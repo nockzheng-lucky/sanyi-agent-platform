@@ -200,6 +200,32 @@ def get_user(user_id: int) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+def set_user_shadow_mode(user_id: int, enabled: bool) -> bool:
+    conn = get_conn()
+    cur = conn.execute(
+        "UPDATE users SET shadow_mode = ? WHERE id = ?",
+        (1 if enabled else 0, user_id),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def is_shadow_mode(actor: Dict[str, Any]) -> bool:
+    """影子模式：只开放给被标记的账号。
+
+    - 用户会话/用户 Key 记录：通过 _user_id 读 users.shadow_mode；
+    - 直接传入 user 记录：读 shadow_mode 字段。
+    """
+    user = None
+    if actor.get("_user_id"):
+        user = get_user(int(actor["_user_id"]))
+    elif actor.get("phone_hash") is not None:
+        user = actor
+    if user is None:
+        return False
+    return int(user.get("shadow_mode") or 0) == 1
+
+
 # ── 用户 Key ──────────────────────────────────────────
 
 

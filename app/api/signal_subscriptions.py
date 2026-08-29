@@ -54,7 +54,7 @@ async def build_snapshot(actor: Dict[str, Any]) -> List[Dict[str, Any]]:
             item["summary"] = result.get("summary")
             item["generatedAt"] = result.get("generatedAt")
             details = result.get("details") or {}
-            item["matches"] = details.get("events") or details.get("cells") or []
+            item["matches"] = details.get("events") or details.get("cells") or details.get("coins") or []
         except HTTPException as exc:
             detail = exc.detail
             item["error"] = detail.get("message") if isinstance(detail, dict) else str(detail)

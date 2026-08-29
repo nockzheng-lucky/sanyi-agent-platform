@@ -21,6 +21,10 @@ FILTER_KEYS = (
     "broken",
     "walkCodes",
     "walkMarks",
+    "quotes",
+    "minChangePercent",
+    "maxChangePercent",
+    "minQuoteVolume",
     "maxAgeMinutes",
     "limit",
 )
