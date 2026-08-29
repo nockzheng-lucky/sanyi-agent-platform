@@ -127,6 +127,15 @@ def _num(value: Any) -> Optional[float]:
 
 
 async def _fetch_tickers(client: Optional[httpx.AsyncClient] = None) -> List[Dict[str, Any]]:
+    if not CRYPTO_TICKERS_URL:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": 503,
+                "message": "币圈数据源未配置，请设置 SANYI_CRYPTO_TICKERS_URL",
+                "data": None,
+            },
+        )
     owns_client = client is None
     if client is None:
         client = httpx.AsyncClient(timeout=httpx.Timeout(CRYPTO_TIMEOUT_SECONDS, connect=5.0))
@@ -293,4 +302,5 @@ crypto_market = FactorSpec(
     handler=_evaluate,
     tags=["crypto", "spot", "24h", "shadow"],
     shadow_only=True,
+    domain="crypto",
 )

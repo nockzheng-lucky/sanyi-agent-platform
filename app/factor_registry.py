@@ -42,10 +42,13 @@ class FactorRegistry:
         self,
         include_inactive: bool = False,
         for_record: Optional[dict] = None,
+        domain: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         out = []
         for spec in self._specs.values():
             if not include_inactive and spec.status != "active":
+                continue
+            if domain and spec.domain != domain:
                 continue
             if spec.shadow_only and (for_record is None or not is_shadow_mode(for_record)):
                 continue

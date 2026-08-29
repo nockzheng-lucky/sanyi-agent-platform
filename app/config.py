@@ -102,11 +102,8 @@ JUE_DIRECTION_URL = os.getenv(
 ).rstrip("/")
 JUE_DIRECTION_TIMEOUT_SECONDS = _int("SANYI_JUE_DIRECTION_TIMEOUT_SECONDS", 10)
 
-# 币圈行情因子（影子模式专用）：默认使用 Gate.io 现货 tickers 公共接口。
-CRYPTO_TICKERS_URL = os.getenv(
-    "SANYI_CRYPTO_TICKERS_URL",
-    "https://api.gateio.ws/api/v4/spot/tickers",
-).rstrip("/")
+# 币圈行情因子（影子模式专用）：数据源由 Owner 提供，未配置时因子返回明确错误。
+CRYPTO_TICKERS_URL = os.getenv("SANYI_CRYPTO_TICKERS_URL", "").strip().rstrip("/")
 CRYPTO_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_TIMEOUT_SECONDS", 10)
 
 SYSTEM_NAME = "三易引擎 Agent 平台"

@@ -52,11 +52,20 @@
   document.body.classList.add("has-sidebar");
   document.querySelectorAll(".topbar").forEach((el) => { el.style.display = "none"; });
 
-  // 只有 admin 角色才显示管理后台入口。
+  // 影子模式账号额外显示“币圈因子”；admin 显示管理后台。
   fetch("/api/v1/auth/me", { credentials: "same-origin" })
     .then((resp) => (resp.ok ? resp.json() : null))
     .then((body) => {
-      if (body && body.code === 0 && body.data && body.data.role === "admin") {
+      const data = body && body.code === 0 ? body.data : null;
+      if (!data) return;
+      if (data.shadowMode) {
+        const cryptoLink = document.createElement("a");
+        cryptoLink.href = "/crypto";
+        cryptoLink.textContent = "币圈因子";
+        if (path.startsWith("/crypto")) cryptoLink.className = "active";
+        nav.insertBefore(cryptoLink, nav.children[2] || null);
+      }
+      if (data.role === "admin") {
         const adminLink = document.createElement("a");
         adminLink.href = "/admin";
         adminLink.textContent = "管理后台";

@@ -85,6 +85,11 @@ async def factors_page():
     return FileResponse(_web_dir / "factors.html", headers={"Cache-Control": "no-store"})
 
 
+@app.get("/crypto", include_in_schema=False)
+async def crypto_factors_page():
+    return FileResponse(_web_dir / "factors.html", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/admin", include_in_schema=False)
 async def admin_page():
     return FileResponse(_web_dir / "admin.html", headers={"Cache-Control": "no-store"})

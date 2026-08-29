@@ -42,6 +42,7 @@ class FactorSpec:
     status: str = "active"
     tags: List[str] = field(default_factory=list)
     shadow_only: bool = False
+    domain: str = "futures"
 
     def descriptor(self) -> Dict[str, Any]:
         return {
@@ -56,6 +57,7 @@ class FactorSpec:
             "status": self.status,
             "tags": list(self.tags),
             "shadowOnly": self.shadow_only,
+            "domain": self.domain,
         }
 
 

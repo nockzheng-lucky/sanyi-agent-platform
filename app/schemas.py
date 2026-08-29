@@ -26,6 +26,7 @@ class FactorDescriptor(BaseModel):
     status: str = "active"
     tags: List[str] = Field(default_factory=list)
     shadowOnly: bool = False
+    domain: str = "futures"
 
 
 class FactorEvaluateRequest(BaseModel):

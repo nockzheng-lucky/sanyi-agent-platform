@@ -117,6 +117,7 @@ async def me(user: dict = Depends(get_user_session)):
             "phoneMasked": user["phone_masked"],
             "status": user["status"],
             "role": user.get("role", "user"),
+            "shadowMode": int(user.get("shadow_mode") or 0) == 1,
         },
     }
 

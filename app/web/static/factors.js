@@ -5,6 +5,21 @@ const factorGrid = document.getElementById("factorGrid");
 const factorEmpty = document.getElementById("factorEmpty");
 const factorError = document.getElementById("factorError");
 const loadedCount = document.getElementById("loadedCount");
+const factorPageTitle = document.getElementById("factorPageTitle");
+const factorPageSubtitle = document.getElementById("factorPageSubtitle");
+
+const PAGE_DOMAIN = window.location.pathname.indexOf("/crypto") === 0 ? "crypto" : "futures";
+const IS_CRYPTO = PAGE_DOMAIN === "crypto";
+
+function setupPageCopy() {
+  document.title = (IS_CRYPTO ? "币圈因子" : "因子列表") + " · 三易引擎";
+  if (factorPageTitle) factorPageTitle.textContent = IS_CRYPTO ? "币圈因子" : "因子列表";
+  if (factorPageSubtitle) {
+    factorPageSubtitle.textContent = IS_CRYPTO
+      ? "影子模式专属：把币圈因子“加载到 Agent”后，订阅和筛选流程与期货因子一致。"
+      : "把因子“加载到 Agent”后，回到 Agent 页面会看到已加载提醒，对话时会优先使用这些因子。";
+  }
+}
 
 async function api(url, options = {}) {
   const resp = await fetch(url, {
@@ -133,20 +148,29 @@ function renderFactor(factor) {
 }
 
 async function loadFactors() {
+  setupPageCopy();
   try {
-    const data = await api("/api/v1/factors");
+    const data = await api("/api/v1/factors?domain=" + PAGE_DOMAIN);
     const factors = (data && data.factors) || [];
     factorGrid.querySelectorAll(".factor-card").forEach((el) => el.remove());
     if (factorEmpty) factorEmpty.style.display = "none";
     for (const factor of factors) renderFactor(factor);
     updateLoadedCount();
     if (!factors.length && factorEmpty) {
-      factorEmpty.textContent = "暂无可用的因子。";
+      factorEmpty.textContent = IS_CRYPTO ? "暂无可用的币圈因子。" : "暂无可用的因子。";
       factorEmpty.style.display = "block";
     }
   } catch (err) {
     if (err.message.includes("401") || err.message.includes("登录已失效")) {
       window.location.href = "/login";
+      return;
+    }
+    if (err.message.includes("403") || err.message.includes("影子模式未开放")) {
+      if (factorEmpty) {
+        factorEmpty.textContent = "影子模式未开放，当前账号无权访问币圈因子。";
+        factorEmpty.style.display = "block";
+      }
+      showError("影子模式未开放");
       return;
     }
     if (factorEmpty) {
