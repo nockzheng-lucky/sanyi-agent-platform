@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from ..accounts import get_default_user_key, get_user, get_user_id_by_session, user_key_sanitize
 from ..agent.loop import run_agent_stream
+from ..chat_history import clear_chat_history, list_chat_history, owner_for_record
 from ..config import COOKIE_SECURE, SYSTEM_NAME
 from ..db import authenticate, create_session, delete_session, get_token_record
 from ..schemas import ChatRequest
@@ -106,15 +107,41 @@ async def logout(request: Request, response: Response, token: dict = Depends(get
     return {"code": 0, "message": "ok", "data": None}
 
 
+@router.get("/history")
+async def history(actor: dict = Depends(get_actor)):
+    owner = owner_for_record(actor)
+    return {"code": 0, "message": "ok", "data": {"messages": list_chat_history(owner)}}
+
+
+@router.delete("/history")
+async def clear_history(actor: dict = Depends(get_actor)):
+    clear_chat_history(owner_for_record(actor))
+    return {"code": 0, "message": "ok", "data": None}
+
+
 @router.post("")
 async def chat(payload: ChatRequest, actor: dict = Depends(get_actor)):
     """SSE 流式聊天；页面走用户会话 Cookie，外部 Agent 走 X-API-Token。"""
+    incoming = [m.model_dump() for m in payload.messages]
+    owner = owner_for_record(actor) if payload.persistHistory else None
+
+    if owner:
+        stored = list_chat_history(owner)
+        # 页面只提交最新一条 user 消息；服务端合并历史。
+        messages = stored + incoming
+        persist_messages = incoming
+    else:
+        messages = incoming
+        persist_messages = None
+
     return StreamingResponse(
         run_agent_stream(
-            messages=[m.model_dump() for m in payload.messages],
+            messages=messages,
             token_record=actor,
             request_id=payload.requestId or "",
             factor_keys=payload.factorKeys,
+            persist_owner_key=owner,
+            persist_messages=persist_messages,
         ),
         media_type="text/event-stream",
         headers={

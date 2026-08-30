@@ -11,6 +11,7 @@
 import json
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from ..chat_history import append_chat_messages
 from ..config import CHAT_MAX_MESSAGES, CHAT_MAX_TOOL_ROUNDS, LLM_MOCK, LLM_MODEL, SYSTEM_NAME
 from ..db import log_usage
 from ..factor_registry import registry
@@ -110,8 +111,13 @@ async def run_agent_stream(
     token_record: dict,
     request_id: str = "",
     factor_keys: Optional[List[str]] = None,
+    persist_owner_key: Optional[str] = None,
+    persist_messages: Optional[List[Dict[str, Any]]] = None,
 ) -> AsyncIterator[str]:
     yield _sse("meta", {"system": SYSTEM_NAME, "mode": "mock" if LLM_MOCK else "llm"})
+
+    if persist_owner_key and persist_messages:
+        append_chat_messages(persist_owner_key, persist_messages)
 
     try:
         filter_state = get_filter_state(token_record)
@@ -126,6 +132,7 @@ async def run_agent_stream(
         return
 
     total_usage = {"input": 0, "output": 0}
+    last_assistant_text = ""
     try:
         for round_no in range(CHAT_MAX_TOOL_ROUNDS):
             agg = await chat_once(history, tools=build_tools(for_record=token_record))
@@ -135,6 +142,8 @@ async def run_agent_stream(
             content = str(agg.get("content") or "")
             for chunk in agg.get("chunks") or []:
                 yield _sse("delta", {"text": chunk})
+            if content:
+                last_assistant_text = content
 
             tool_calls = agg.get("tool_calls") or []
             assistant_msg = {
@@ -185,6 +194,7 @@ async def run_agent_stream(
             agg = await chat_once(history, tools=None)
             total_usage["input"] += int(agg.get("usage", {}).get("input") or 0)
             total_usage["output"] += int(agg.get("usage", {}).get("output") or 0)
+            last_assistant_text = str(agg.get("content") or "")
             for chunk in agg.get("chunks") or []:
                 yield _sse("delta", {"text": chunk})
 
@@ -200,6 +210,11 @@ async def run_agent_stream(
             request_id=request_id,
             detail=json.dumps({"rounds": min(round_no + 1, CHAT_MAX_TOOL_ROUNDS)}, ensure_ascii=False),
         )
+        if persist_owner_key and last_assistant_text:
+            append_chat_messages(
+                persist_owner_key,
+                [{"role": "assistant", "content": last_assistant_text}],
+            )
         yield _sse("done", {"usage": total_usage})
     except Exception as exc:  # noqa: BLE001 - 必须把错误结构化返回给前端
         log_usage(

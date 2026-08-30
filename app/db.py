@@ -186,6 +186,17 @@ CREATE TABLE IF NOT EXISTS user_push_channels (
     updated_at TEXT NOT NULL,
     UNIQUE(user_id, provider)
 );
+
+CREATE TABLE IF NOT EXISTS chat_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_key TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_history_owner_id
+    ON chat_history(owner_key, id);
 """
 
 _local = threading.local()

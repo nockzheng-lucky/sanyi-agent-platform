@@ -21,43 +21,19 @@ const sendBtn = document.getElementById("sendBtn");
 let history = [];
 let streaming = false;
 let subscriptionStream = null;
-let historyOwnerKey = null;
 
-const CHAT_HISTORY_KEY_PREFIX = "sanyi.chatHistory.";
-const CHAT_HISTORY_MAX = 40;
-
-function historyStorageKey(actor) {
-  if (actor && actor.user && actor.user.id) return "user:" + actor.user.id;
-  if (actor && actor.token && actor.token.id) return "token:" + actor.token.id;
-  return "anonymous";
-}
-
-function saveHistory() {
-  if (!historyOwnerKey) return;
-  try {
-    const items = history.slice(-CHAT_HISTORY_MAX).map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-    localStorage.setItem(CHAT_HISTORY_KEY_PREFIX + historyOwnerKey, JSON.stringify(items));
-  } catch (_e) {}
-}
-
-function loadChatHistory(actor) {
-  historyOwnerKey = historyStorageKey(actor);
+async function loadChatHistory(actor) {
   history = [];
   messagesEl.textContent = "";
   try {
-    const raw = localStorage.getItem(CHAT_HISTORY_KEY_PREFIX + historyOwnerKey);
-    const saved = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(saved)) {
-      for (const item of saved) {
-        if (!item || (item.role !== "user" && item.role !== "assistant")) continue;
-        const content = typeof item.content === "string" ? item.content : "";
-        if (!content) continue;
-        history.push({ role: item.role, content });
-        addMessage(item.role, content);
-      }
+    const data = await api("/api/chat/history");
+    const messages = (data && data.messages) || [];
+    for (const item of messages) {
+      if (!item || (item.role !== "user" && item.role !== "assistant")) continue;
+      const content = typeof item.content === "string" ? item.content : "";
+      if (!content) continue;
+      history.push({ role: item.role, content });
+      addMessage(item.role, content);
     }
   } catch (_e) {
     history = [];
@@ -520,7 +496,6 @@ chatForm.addEventListener("submit", async (ev) => {
   chatInput.value = "";
   history.push({ role: "user", content: text });
   addMessage("user", text);
-  saveHistory();
 
   const assistantEl = addMessage("assistant", "");
   const toolRow = addToolRow();
@@ -530,7 +505,7 @@ chatForm.addEventListener("submit", async (ev) => {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: history, factorKeys: getLoadedFactorKeys() }),
+      body: JSON.stringify({ messages: [{ role: "user", content: text }], factorKeys: getLoadedFactorKeys(), persistHistory: true }),
     });
     if (!resp.ok) {
       const body = await resp.json().catch(() => ({}));
@@ -576,7 +551,6 @@ chatForm.addEventListener("submit", async (ev) => {
     } else {
       history.push({ role: "assistant", content: "（模型未返回文本）" });
     }
-    saveHistory();
   } catch (err) {
     addMessage("error", err.message);
   } finally {

@@ -76,6 +76,7 @@ python -m app.mcp
 - [x] 因子注册表 + 统一 evaluate 接口
 - [x] 门信号读取 + 交易时段 + 30 秒轮询 + 新事件去重
 - [x] 页面 Agent（DeepSeek/OpenAI 兼容 function calling）
+- [x] 服务端会话历史：按账户持久化，切页/刷新后自动恢复
 - [x] 因子列表 + 加载到 Agent + 自然语言组合/调整筛选条件
 - [x] 持续信号订阅：Agent 确认后，聊天页左侧订阅面板持续显示匹配信号
 - [x] Pushplus 推送：按订阅动态推送新匹配信号（用户绑定自己的 token）

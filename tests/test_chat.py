@@ -89,6 +89,41 @@ def test_chat_natural_language_filter_update(client):
     assert any(call.get("name") == "sanyi_evaluate_factor" for call in tool_calls)
 
 
+def test_chat_server_history_persists_and_clears(client):
+    token = issue_token(name="chat-history", quota_total=100000, rate_limit_per_min=1000)["token"]
+    assert client.post("/api/chat/login", json={"token": token}).status_code == 200
+
+    assert client.get("/api/chat/history").json()["data"]["messages"] == []
+
+    resp = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "你好"}],
+            "persistHistory": True,
+        },
+    )
+    assert resp.status_code == 200
+    messages = client.get("/api/chat/history").json()["data"]["messages"]
+    roles = [m["role"] for m in messages]
+    assert roles == ["user", "assistant"]
+
+    resp = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "地门信号怎么样"}],
+            "persistHistory": True,
+        },
+    )
+    assert resp.status_code == 200
+    messages = client.get("/api/chat/history").json()["data"]["messages"]
+    assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant"]
+    assert any("地门信号" in m["content"] for m in messages)
+
+    resp = client.delete("/api/chat/history")
+    assert resp.status_code == 200
+    assert client.get("/api/chat/history").json()["data"]["messages"] == []
+
+
 def test_chat_entry_token_is_exchanged_for_cookie(client):
     token = issue_token(name="entry-test", quota_total=100000)["token"]
     resp = client.get(f"/chat?token={token}", follow_redirects=False)

@@ -52,3 +52,5 @@ class ChatRequest(BaseModel):
     requestId: Optional[str] = None
     # 用户在“因子列表”页加载到 Agent 的因子；仅作为系统提示上下文，不绕过工具校验。
     factorKeys: List[str] = Field(default_factory=list, max_length=20)
+    # 页面会话由服务端合并/持久化历史；外部 Agent 直接传完整 messages 时保持 false。
+    persistHistory: bool = False
