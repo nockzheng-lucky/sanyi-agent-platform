@@ -143,6 +143,8 @@ function firstDefined(...values) {
 const FACTOR_LABELS = {
   dimen_gate_signal: "地门信号",
   jue_direction: "诀与破诀",
+  gate_condition: "门条件",
+  wave_jue_combo: "走法×破诀组合",
   crypto_market: "币圈行情",
 };
 

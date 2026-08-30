@@ -80,6 +80,7 @@ python -m app.mcp
 - [x] 持续信号订阅：Agent 确认后，聊天页左侧订阅面板持续显示匹配信号
 - [x] Pushplus 推送：按订阅动态推送新匹配信号（用户绑定自己的 token）
 - [x] 因子：地门信号 `dimen_gate_signal`、诀与破诀 `jue_direction`
+- [x] 因子：门条件 `gate_condition`、走法×破诀组合 `wave_jue_combo`（当前快照版）
 - [x] 影子模式：158 管理员专属币圈行情因子 `crypto_market`
 - [x] `SANYI_GATE_EVENTS_DB` 接生产 SQLite 联调
 - [x] 真实 LLM 联调（DeepSeek key 到位后填 `.env`）

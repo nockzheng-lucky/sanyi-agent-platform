@@ -66,7 +66,7 @@ def test_shadow_factor_hidden_from_normal_users(client, token_headers):
     assert "crypto_market" not in keys
 
     futures = [f["factorKey"] for f in client.get("/api/v1/factors?domain=futures", headers=token_headers).json()["data"]["factors"]]
-    assert futures == ["dimen_gate_signal", "jue_direction"]
+    assert futures == ["dimen_gate_signal", "jue_direction", "gate_condition", "wave_jue_combo"]
 
     assert client.get("/api/v1/factors?domain=crypto", headers=token_headers).status_code == 403
     assert client.get("/crypto").status_code == 200

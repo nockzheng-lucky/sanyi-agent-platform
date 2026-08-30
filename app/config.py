@@ -102,6 +102,13 @@ JUE_DIRECTION_URL = os.getenv(
 ).rstrip("/")
 JUE_DIRECTION_TIMEOUT_SECONDS = _int("SANYI_JUE_DIRECTION_TIMEOUT_SECONDS", 10)
 
+# 门条件因子：只读 qh /api/gates，失败只影响该因子，不影响平台其他功能。
+GATE_API_URL = os.getenv(
+    "SANYI_GATE_API_URL",
+    "https://qh.shhghf.com/api/gates?view=all",
+).strip()
+GATE_API_TIMEOUT_SECONDS = _int("SANYI_GATE_API_TIMEOUT_SECONDS", 10)
+
 # 币圈诀与破诀因子（影子模式专用）：东京币圈服务器 sanyi-bybit-tokyo-01。
 CRYPTO_JUE_URL = os.getenv(
     "SANYI_CRYPTO_JUE_DIRECTION_URL",

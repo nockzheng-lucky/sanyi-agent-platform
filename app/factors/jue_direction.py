@@ -12,6 +12,7 @@
 本因子只负责查询和结构化，不重算 qh 引擎；每个 cell 是
 「品种 × 周期」的一个诀状态单元。
 """
+import time
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -162,10 +163,17 @@ _OUTPUT_SCHEMA: Dict[str, Any] = {
 }
 
 
+_RAW_CACHE: Dict[str, Any] = {"at": 0.0, "payload": None}
+_RAW_CACHE_TTL_SECONDS = 15.0
+
+
 async def _fetch_raw(client: Optional[httpx.AsyncClient] = None) -> Dict[str, Any]:
-    """读取 qh 诀方向 API。测试可 monkeypatch 本函数，避免外网依赖。"""
+    """读取 qh 诀方向 API。模块级短缓存降低 qh 压力；测试可 monkeypatch。"""
     owns_client = client is None
-    if client is None:
+    if owns_client:
+        now = time.monotonic()
+        if _RAW_CACHE["payload"] is not None and now - _RAW_CACHE["at"] < _RAW_CACHE_TTL_SECONDS:
+            return _RAW_CACHE["payload"]
         client = httpx.AsyncClient(timeout=httpx.Timeout(JUE_DIRECTION_TIMEOUT_SECONDS, connect=5.0))
     try:
         try:
@@ -200,6 +208,9 @@ async def _fetch_raw(client: Optional[httpx.AsyncClient] = None) -> Dict[str, An
             status_code=502,
             detail={"code": 502, "message": "诀方向数据源响应结构不正确", "data": None},
         )
+    if owns_client:
+        _RAW_CACHE["at"] = time.monotonic()
+        _RAW_CACHE["payload"] = payload
     return payload
 
 
