@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>策略订阅 · 三易引擎</title>
+  <link rel="stylesheet" href="/chat/style.css?v=20260920figma4" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-bar"></span>
+      <span class="logo">三易</span>
+      <div>
+        <h1>策略订阅</h1>
+        <p class="subtitle">基础池持续展示 · 触发自动推送 · 今日已发仅当天</p>
+      </div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <span class="topbar-clock" id="topbar-clock">--:--:-- UTC+8</span>
+    <div class="topnav">
+      <a href="/chat">Agent</a>
+      <a href="/keys">Key 管理</a>
+      <a href="/login">登录</a>
+      <span id="account" class="account"></span>
+    </div>
+  </header>
+
+  <main class="strategies-page strategies-layout">
+    <section class="strategies-main">
+      <div class="strategies-head">
+        <div>
+          <h2>策略漏斗</h2>
+          <p>上方是基础池，下方是当前触发与今天已经推送过的信号。</p>
+        </div>
+        <div class="strategies-actions">
+          <span id="strategiesCount" class="count">0</span>
+          <span id="strategiesRefreshHint" class="refresh-hint">30 秒一刷新</span>
+          <button id="refreshStrategies" type="button">刷新</button>
+        </div>
+      </div>
+      <div id="strategyList" class="strategy-list">
+        <p class="strategy-empty">暂无策略订阅。可以回到 <a href="/chat">Agent</a> 让它帮你创建。</p>
+      </div>
+    </section>
+
+    <aside class="strategies-chat-panel">
+      <div class="chat-panel-head">
+        <div>
+          <h2>Agent 对话</h2>
+          <p>和左侧策略漏斗同步；切换页面不会丢回答。</p>
+        </div>
+        <a href="/chat" class="chat-panel-full">全屏</a>
+      </div>
+      <div id="agentChatMessages" class="agent-chat-messages">
+        <p class="agent-chat-empty">正在读取对话…</p>
+      </div>
+      <form id="agentChatForm" class="agent-chat-form">
+        <textarea id="agentChatInput" rows="2" placeholder="在这里问 Agent，或让它创建/调整订阅"></textarea>
+        <button type="submit" id="agentChatSend">发送</button>
+      </form>
+    </aside>
+  </main>
+
+  <script>
+    (function(){
+      var el = document.getElementById("topbar-clock");
+      function tick(){
+        if (!el) return;
+        try {
+          var parts = new Intl.DateTimeFormat("zh-CN", { timeZone:"Asia/Shanghai", hour12:false, hour:"2-digit", minute:"2-digit", second:"2-digit" }).formatToParts(new Date());
+          var hh = (parts.find(function(p){return p.type==="hour";})||{}).value || "--";
+          var mm = (parts.find(function(p){return p.type==="minute";})||{}).value || "--";
+          var ss = (parts.find(function(p){return p.type==="second";})||{}).value || "--";
+          el.textContent = hh + ":" + mm + ":" + ss + " UTC+8";
+        } catch(e){}
+      }
+      tick(); setInterval(tick, 1000);
+    })();
+  </script>
+  <script src="/chat/strategies.js?v=20260918_macross"></script>
+  <script src="/chat/chat_panel.js?v=20260917_chat1"></script>
+<script src="/chat/sidebar.js"></script>
+</body>
+</html>
