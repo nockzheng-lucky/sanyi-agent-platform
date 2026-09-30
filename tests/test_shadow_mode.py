@@ -66,7 +66,7 @@ def test_shadow_factor_hidden_from_normal_users(client, token_headers):
     assert "crypto_market" not in keys
 
     futures = [f["factorKey"] for f in client.get("/api/v1/factors?domain=futures", headers=token_headers).json()["data"]["factors"]]
-    assert futures == ["dimen_gate_signal", "futures_gate_signal", "jue_direction", "gate_condition", "wave_jue_combo"]
+    assert futures == ["dimen_gate_signal", "jue_direction", "gate_condition", "wave_jue_combo"]
 
     assert client.get("/api/v1/factors?domain=crypto", headers=token_headers).status_code == 403
     assert client.get("/crypto").status_code == 200
@@ -96,7 +96,7 @@ def test_shadow_user_sees_and_evaluates_crypto(client, monkeypatch):
     futures = [f["factorKey"] for f in client.get("/api/v1/factors?domain=futures").json()["data"]["factors"]]
     crypto = [f["factorKey"] for f in client.get("/api/v1/factors?domain=crypto").json()["data"]["factors"]]
     assert "crypto_market" not in futures
-    assert crypto == ["crypto_market", "crypto_gate_condition", "crypto_gate_signal", "crypto_wave_jue_combo"]
+    assert crypto == ["crypto_market", "crypto_gate_condition", "crypto_wave_jue_combo"]
 
     resp = client.post(
         "/api/v1/factors/evaluate",

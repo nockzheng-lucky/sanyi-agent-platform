@@ -15,6 +15,19 @@ from typing import Any, Dict, List, Optional
 from .accounts import is_shadow_mode
 from .db import _now_iso, get_conn
 from .factor_registry import registry
+from .strategy_model import (
+    LAYER_EVENT,
+    LAYER_POOL,
+    MODE_AUTO,
+    MODE_TRIGGER,
+    VALID_LAYERS,
+    VALID_MODES,
+    normalize_frequency_offset,
+    normalize_frequency_offsets,
+    normalize_target_frequencies,
+    resolve_subscription_mode,
+    structure_summary,
+)
 
 MAX_CONDITIONS = 8
 _ROLES = ("primary", "context")
@@ -102,6 +115,16 @@ def _normalize_condition(
     if index > 0 and role == "primary":
         raise ValueError("组合订阅只能有一条 primary 条件")
 
+    layer = str(raw.get("layer") or raw.get("conditionLayer") or "").strip()
+    if not layer:
+        layer = LAYER_EVENT if role == "primary" else LAYER_POOL
+    if layer not in VALID_LAYERS:
+        raise ValueError("条件 %d 的 layer 只支持 event / pool" % (index + 1))
+    if role == "primary" and layer != LAYER_EVENT:
+        raise ValueError("事件条件必须是 primary")
+    if role == "context" and layer != LAYER_POOL:
+        raise ValueError("候选池条件必须是 context")
+
     join = raw.get("join") if isinstance(raw.get("join"), dict) else raw.get("joinOn")
     if not isinstance(join, dict):
         join = {}
@@ -109,6 +132,8 @@ def _normalize_condition(
         join_with = None
         join_symbol = "symbol"
         frequency_offset = 0
+        frequency_offsets = [0]
+        target_frequencies: List[str] = []
         side_rule = None
     else:
         join_with = str(_pick(raw, join, "joinWith", "join_with") or "primary")
@@ -117,23 +142,52 @@ def _normalize_condition(
             raise ValueError("条件 %d 的 joinWith 只支持 primary" % (index + 1))
         if join_symbol not in _JOIN_SYMBOL:
             raise ValueError("条件 %d 的 joinSymbol 只支持 symbol" % (index + 1))
-        try:
-            frequency_offset = int(_pick(raw, join, "frequencyOffset", "frequency_offset") or 0)
-        except (TypeError, ValueError):
-            raise ValueError("条件 %d 的 frequencyOffset 必须是整数" % (index + 1))
-        if frequency_offset not in (0, 1):
-            raise ValueError("条件 %d 的 frequencyOffset 只支持 0 / 1" % (index + 1))
+        target_frequencies = normalize_target_frequencies(
+            _pick(raw, join, "targetFrequencies", "target_frequencies"),
+            field="条件 %d 的 targetFrequencies" % (index + 1),
+        )
+        legacy_raw = _pick(raw, join, "frequencyOffset", "frequency_offset")
+        explicit_offsets = _pick(raw, join, "frequencyOffsets", "frequency_offsets")
+        if explicit_offsets is None:
+            if legacy_raw is not None:
+                frequency_offsets = [
+                    normalize_frequency_offset(
+                        legacy_raw,
+                        field="条件 %d 的 frequencyOffset" % (index + 1),
+                    )
+                ]
+            elif target_frequencies:
+                # 绝对锚定模式：没有显式 offset 时只锚定目标级别，不同时命中 primary 自身。
+                frequency_offsets = []
+            else:
+                frequency_offsets = [0]
+        else:
+            frequency_offsets = normalize_frequency_offsets(
+                explicit_offsets,
+                field="条件 %d 的 frequencyOffsets" % (index + 1),
+            )
+            if legacy_raw is not None:
+                legacy_offset = normalize_frequency_offset(
+                    legacy_raw,
+                    field="条件 %d 的 frequencyOffset" % (index + 1),
+                )
+                if legacy_offset not in frequency_offsets:
+                    frequency_offsets.append(legacy_offset)
         side_rule = _normalize_side_rule(
             _pick(raw, join, "sideRule", "side_rule")
         )
+        frequency_offset = frequency_offsets[0] if frequency_offsets else 0
 
     return {
         "factorKey": factor_key,
         "filters": filters,
         "role": role,
+        "layer": layer,
         "joinWith": join_with,
         "joinSymbol": join_symbol,
         "frequencyOffset": frequency_offset,
+        "frequencyOffsets": frequency_offsets,
+        "targetFrequencies": target_frequencies,
         "sideRule": side_rule,
         "sortOrder": index,
     }
@@ -170,13 +224,56 @@ def _normalize_conditions(
             "factorKey": factor_key,
             "filters": filters,
             "role": "primary",
+            "layer": LAYER_EVENT,
             "joinWith": None,
             "joinSymbol": "symbol",
             "frequencyOffset": 0,
+            "frequencyOffsets": [0],
+            "targetFrequencies": [],
             "sideRule": None,
             "sortOrder": 0,
         }
     ]
+
+
+def _ensure_trigger_pool(conditions: List[Dict[str, Any]]) -> tuple[bool, List[Dict[str, Any]]]:
+    """触发型单条件订阅自动补一个全市场候选池。
+
+    用户只说“15 分钟地门开门”这类动作条件时，平台不再要求用户补齐背景池；
+    默认池使用同域的 price 因子（只带 primary 的 frequencies），
+    语义 = 与动作同一品种、同一周期，因此不会改变触发命中集合。
+    """
+    if len(conditions) != 1:
+        return False, conditions
+    resolved = resolve_subscription_mode(MODE_AUTO, conditions)
+    if resolved != MODE_TRIGGER:
+        return False, conditions
+    primary = conditions[0]
+    factor_key = str(primary.get("factorKey") or "")
+    domain = factor_key.split("_", 1)[0] if "_" in factor_key else ""
+    price_key = "%s_price" % domain if domain else ""
+    price_spec = registry.get(price_key)
+    if price_spec is None or price_spec.status != "active":
+        return False, conditions
+    pool_filters: Dict[str, Any] = {}
+    frequencies = (primary.get("filters") or {}).get("frequencies")
+    if isinstance(frequencies, list) and frequencies:
+        pool_filters["frequencies"] = list(frequencies)
+    pool_condition = {
+        "factorKey": price_key,
+        "filters": pool_filters,
+        "role": "context",
+        "layer": LAYER_POOL,
+        "joinWith": "primary",
+        "joinSymbol": "symbol",
+        "frequencyOffset": 0,
+        "frequencyOffsets": [0],
+        "targetFrequencies": [],
+        "sideRule": None,
+        "sortOrder": len(conditions),
+        "autoPool": True,
+    }
+    return True, list(conditions) + [pool_condition]
 
 
 def create_signal_subscription(
@@ -185,14 +282,25 @@ def create_signal_subscription(
     filters: Optional[Dict[str, Any]] = None,
     name: str = "",
     conditions: Optional[List[Dict[str, Any]]] = None,
+    mode: str = "auto",
 ) -> Dict[str, Any]:
     user_id = user_id_from_record(token_record)
     normalized = _normalize_conditions(token_record, factor_key, filters, conditions)
     primary = normalized[0]
     primary_spec = registry.get(primary["factorKey"])
+    if mode not in VALID_MODES:
+        raise ValueError("mode 只支持 auto / trigger / pool")
+    auto_pool_added, normalized = _ensure_trigger_pool(normalized)
+    resolved_mode = resolve_subscription_mode(mode, normalized)
+    structure = structure_summary(resolved_mode, normalized)
+    if resolved_mode == MODE_TRIGGER and not structure["structureComplete"]:
+        raise ValueError(
+            "订阅结构不完整，缺少：%s。触发型订阅必须包含 1 个事件条件 + 至少 1 个候选池条件。"
+            % "；".join(structure["missingParts"])
+        )
 
     if not name:
-        if len(normalized) == 1:
+        if len(normalized) == 1 or auto_pool_added:
             name = primary_spec.name if primary_spec else primary["factorKey"]
         else:
             name = "%s等%d项组合订阅" % (primary_spec.name if primary_spec else primary["factorKey"], len(normalized))
@@ -200,7 +308,7 @@ def create_signal_subscription(
     conn = get_conn()
     cur = conn.execute(
         "INSERT INTO signal_subscriptions(user_id, factor_key, filters_json, name,"
-        " status, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?)",
+        " status, created_at, updated_at, mode) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)",
         (
             user_id,
             primary["factorKey"],
@@ -208,25 +316,30 @@ def create_signal_subscription(
             str(name)[:80],
             _now_iso(),
             _now_iso(),
+            mode,
         ),
     )
     subscription_id = int(cur.lastrowid)
     conn.executemany(
         "INSERT INTO subscription_conditions("
-        "subscription_id, factor_key, filters_json, role, join_with, join_symbol,"
-        "frequency_offset, side_rule, sort_order)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "subscription_id, factor_key, filters_json, role, condition_layer,"
+        "join_with, join_symbol, frequency_offset, side_rule, sort_order,"
+        "frequency_offsets_json, target_frequencies_json)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 subscription_id,
                 condition["factorKey"],
                 json.dumps(condition["filters"], ensure_ascii=False),
                 condition["role"],
+                condition["layer"],
                 condition["joinWith"],
                 condition["joinSymbol"],
                 condition["frequencyOffset"],
                 condition["sideRule"],
                 condition["sortOrder"],
+                json.dumps(condition["frequencyOffsets"], ensure_ascii=False),
+                json.dumps(condition["targetFrequencies"], ensure_ascii=False),
             )
             for condition in normalized
         ],
@@ -245,6 +358,10 @@ def _load_conditions(subscription_id: int) -> List[Dict[str, Any]]:
     conditions = []
     for row in rows:
         rec = dict(row)
+        frequency_offsets = _parse_json(rec.get("frequency_offsets_json"), None)
+        if not isinstance(frequency_offsets, list):
+            # 旧库没有该列数据：从单值 frequency_offset 兼容。
+            frequency_offsets = [int(rec["frequency_offset"] or 0)]
         conditions.append(
             {
                 "id": int(rec["id"]),
@@ -252,9 +369,14 @@ def _load_conditions(subscription_id: int) -> List[Dict[str, Any]]:
                 "factorKey": rec["factor_key"],
                 "filters": _parse_json(rec.get("filters_json"), {}),
                 "role": rec["role"],
+                "layer": rec.get("condition_layer") or (
+                    LAYER_EVENT if rec["role"] == "primary" else LAYER_POOL
+                ),
                 "joinWith": rec.get("join_with"),
                 "joinSymbol": rec.get("join_symbol"),
                 "frequencyOffset": int(rec["frequency_offset"] or 0),
+                "frequencyOffsets": frequency_offsets,
+                "targetFrequencies": _parse_json(rec.get("target_frequencies_json"), []),
                 "sideRule": rec.get("side_rule"),
                 "sortOrder": int(rec["sort_order"] or 0),
             }
@@ -274,14 +396,19 @@ def _to_dict(row: Any) -> Dict[str, Any]:
                 "factorKey": rec["factor_key"],
                 "filters": _parse_json(rec.get("filters_json"), {}),
                 "role": "primary",
+                "layer": LAYER_EVENT,
                 "joinWith": None,
                 "joinSymbol": "symbol",
                 "frequencyOffset": 0,
+                "frequencyOffsets": [0],
+                "targetFrequencies": [],
                 "sideRule": None,
                 "sortOrder": 0,
             }
         ]
     primary = conditions[0]
+    mode = resolve_subscription_mode(rec.get("mode") or "auto", conditions)
+    structure = structure_summary(mode, conditions)
     return {
         "id": rec["id"],
         "userId": rec["user_id"],
@@ -293,6 +420,12 @@ def _to_dict(row: Any) -> Dict[str, Any]:
         "createdAt": rec.get("created_at"),
         "updatedAt": rec.get("updated_at"),
         "baselineAt": rec.get("baseline_at"),
+        "mode": rec.get("mode") or "auto",
+        "resolvedMode": mode,
+        "eventConditions": structure["eventConditions"],
+        "poolConditions": structure["poolConditions"],
+        "structureComplete": structure["structureComplete"],
+        "missingParts": structure["missingParts"],
     }
 
 

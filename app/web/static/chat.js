@@ -21,8 +21,21 @@ const sendBtn = document.getElementById("sendBtn");
 let history = [];
 let streaming = false;
 let subscriptionStream = null;
+let chatAbortController = null;
 let shadowMode = false;
 let collapsedSubscriptionGroups = new Set();
+
+function isNearBottom() {
+  if (!messagesEl) return true;
+  return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 48;
+}
+
+function scrollToBottom(force = false) {
+  if (!messagesEl) return;
+  if (force || isNearBottom()) {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+}
 
 async function refreshShadowMode() {
   try {
@@ -72,6 +85,7 @@ async function showChat(actor) {
   await refreshShadowMode();
   loadChatHistory(actor);
   renderLoadedFactors();
+  loadSubscriptionMeta();
   loadSubscriptions();
   connectSubscriptionStream();
 }
@@ -89,12 +103,17 @@ async function api(url, options = {}) {
   return body.data;
 }
 
-function addMessage(role, text) {
+function addMessage(role, text, options = {}) {
   const div = document.createElement("div");
   div.className = `msg ${role}`;
   div.textContent = text;
   messagesEl.appendChild(div);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  const scrollMode = options.scroll || "auto";
+  if (scrollMode === "force") {
+    scrollToBottom(true);
+  } else if (scrollMode === "auto") {
+    scrollToBottom(false);
+  }
   return div;
 }
 
@@ -110,16 +129,21 @@ function addChip(row, text, cls = "") {
   span.className = `chip ${cls}`;
   span.textContent = text;
   row.appendChild(span);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  scrollToBottom(false);
 }
 
 const LOADED_FACTORS_KEY = "sanyi.loadedFactors";
 
+const LEGACY_FACTOR_KEYS = [
+  "dimen_gate_signal", "futures_gate_signal", "jue_direction", "gate_condition",
+  "wave_jue_combo", "crypto_market", "crypto_gate_condition", "crypto_gate_signal",
+  "crypto_wave_jue_combo", "futures_gate_walk2_follow", "crypto_gate_walk2_follow",
+];
 function getLoadedFactors() {
   try {
     const value = JSON.parse(localStorage.getItem(LOADED_FACTORS_KEY) || "[]");
     if (!Array.isArray(value)) return [];
-    return value.filter((item) => item && typeof item.factorKey === "string" && item.factorKey);
+    return value.filter((item) => item && typeof item.factorKey === "string" && item.factorKey && !LEGACY_FACTOR_KEYS.includes(item.factorKey));
   } catch (_e) {
     return [];
   }
@@ -175,15 +199,26 @@ function firstDefined(...values) {
 }
 
 const FACTOR_LABELS = {
-  dimen_gate_signal: "地门信号",
-  futures_gate_signal: "期货今日门信号",
-  jue_direction: "诀与破诀",
-  gate_condition: "门条件",
-  wave_jue_combo: "走法×破诀组合",
-  crypto_market: "币圈行情",
-  crypto_gate_condition: "币圈门条件",
-  crypto_gate_signal: "币圈今日门信号",
-  crypto_wave_jue_combo: "币圈走法×破诀组合",
+  futures_price: "期货 · 价格 K 线",
+  futures_ma: "期货 · 均线 MA52/208/832（可对比25/144/169）",
+  futures_ma_triple: "期货 · 均线 MA25/144/169（可对比52/208/832）",
+  futures_macd: "期货 · MACD",
+  futures_rsi: "期货 · RSI3 进攻",
+  futures_segment: "期货 · 走势段",
+  futures_jue: "期货 · 诀",
+  futures_door: "期货 · 门",
+  futures_spatial: "期货 · 门价与均线",
+  futures_tf: "期货 · 跨级别",
+  crypto_price: "币圈 · 价格 K 线",
+  crypto_ma: "币圈 · 均线 MA52/208/832（可对比25/144/169）",
+  crypto_ma_triple: "币圈 · 均线 MA25/144/169（可对比52/208/832）",
+  crypto_macd: "币圈 · MACD",
+  crypto_rsi: "币圈 · RSI3 进攻",
+  crypto_segment: "币圈 · 走势段",
+  crypto_jue: "币圈 · 诀",
+  crypto_door: "币圈 · 门",
+  crypto_spatial: "币圈 · 门价与均线",
+  crypto_tf: "币圈 · 跨级别",
 };
 
 const SUBSCRIPTION_GROUPS = [
@@ -196,8 +231,10 @@ function subscriptionDomain(factorKey) {
 }
 
 const FREQUENCY_LABELS = {
+  "1m": "1分钟",
   "5m": "5分钟",
   "15m": "15分钟",
+  "30m": "30分钟",
   "1h": "1小时",
   "1d": "日线",
   "1w": "周线",
@@ -225,7 +262,7 @@ function factorLabel(factorKey) {
 function subscriptionTitleText(sub) {
   const raw = sub.name || factorLabel(sub.factorKey);
   // Agent 生成的名称里可能带（15m/1h）这类技术括号，列表里用下方中文条件展示。
-  return String(raw).replace(/（[^）]*）/g, "").trim() || factorLabel(sub.factorKey);
+  return String(raw).replace(/（[^）]*）/g, "").replace(/&gt;/g, ">").replace(/&lt;/g, "<").trim() || factorLabel(sub.factorKey);
 }
 
 function frequencyLabel(value) {
@@ -259,6 +296,20 @@ const GATE_TYPE_LABELS = {
 
 function gateTypeLabel(value) {
   return GATE_TYPE_LABELS[value] || value;
+}
+
+function signatureText(signature, frequency) {
+  const text = String(signature || "");
+  if (text.length !== 6) return "";
+  const pairs = [["价", "25"], ["价", "144"], ["价", "169"], ["25", "144"], ["25", "169"], ["144", "169"]];
+  const arrows = { "+": "↑", "-": "↓", "0": "≈" };
+  const level = frequency ? frequencyLabel(frequency) + "六线：" : "六线：";
+  return level + pairs.map((pair, index) => {
+    const left = pair[0];
+    const right = pair[1];
+    const arrow = arrows[text[index]] || "?";
+    return `${left}${arrow}${right}`;
+  }).join(" · ");
 }
 
 function filterPartsText(filters) {
@@ -321,6 +372,71 @@ function filterPartsText(filters) {
     const toleranceText = value.ma208Mode === "above" ? "" : `（±${tolerance}%）`;
     parts.push(`${anchor}${MA208_MODE_LABELS[value.ma208Mode] || value.ma208Mode}${toleranceText}`);
   }
+  if (typeof value.ma52AboveMa208 === "boolean") {
+    parts.push(value.ma52AboveMa208 ? "MA52>MA208" : "MA52<MA208");
+  }
+  if (typeof value.ma52AboveMa832 === "boolean") {
+    parts.push(value.ma52AboveMa832 ? "MA52>MA832" : "MA52<MA832");
+  }
+  if (typeof value.ma208AboveMa832 === "boolean") {
+    parts.push(value.ma208AboveMa832 ? "MA208>MA832" : "MA208<MA832");
+  }
+  if (value.allowMissingMaRelation === true && (
+    typeof value.ma208AboveMa832 === "boolean" ||
+    typeof value.ma52AboveMa208 === "boolean" ||
+    typeof value.ma52AboveMa832 === "boolean"
+  )) {
+    parts.push("关系缺失放行·未确认");
+  }
+  if (Array.isArray(value.relations) && value.relations.length) {
+    const RELATION_LABELS = {
+      price_ma25: "收盘价-MA25",
+      price_ma144: "收盘价-MA144",
+      price_ma169: "收盘价-MA169",
+      ma25_ma144: "MA25-MA144",
+      ma25_ma169: "MA25-MA169",
+      ma144_ma169: "MA144-MA169",
+      ma25_ma52: "MA25-MA52",
+      ma25_ma208: "MA25-MA208",
+      ma25_ma832: "MA25-MA832",
+      ma144_ma52: "MA144-MA52",
+      ma144_ma208: "MA144-MA208",
+      ma144_ma832: "MA144-MA832",
+      ma169_ma52: "MA169-MA52",
+      ma169_ma208: "MA169-MA208",
+      ma169_ma832: "MA169-MA832",
+    };
+    parts.push("关系：" + value.relations.map((item) => RELATION_LABELS[item] || item).join("、"));
+  }
+  if (Array.isArray(value.relationStates) && value.relationStates.length) {
+    const RELATION_STATE_LABELS = { above: "上方", near: "贴线", below: "下方" };
+    parts.push("状态：" + value.relationStates.map((item) => RELATION_STATE_LABELS[item] || item).join("/"));
+  }
+  if (Array.isArray(value.relationCrosses) && value.relationCrosses.length) {
+    const RELATION_CROSS_LABELS = { cross_up: "上穿/金叉", cross_down: "下穿/死叉", none: "无穿越" };
+    parts.push("穿越：" + value.relationCrosses.map((item) => RELATION_CROSS_LABELS[item] || item).join("/"));
+  }
+  if (value.requireAllRelations === true && Array.isArray(value.relations) && value.relations.length > 1) {
+    parts.push("全部关系同时满足");
+  }
+  if (typeof value.tolerancePct === "number") {
+    parts.push(`贴线容差±${value.tolerancePct}%`);
+  }
+  if (Array.isArray(value.priceZones) && value.priceZones.length) {
+    const PRICE_ZONE_LABELS = { above_all: "价格在三线之上", below_all: "价格在三线之下", inside: "价格夹在三线之间" };
+    parts.push(value.priceZones.map((item) => PRICE_ZONE_LABELS[item] || item).join("、"));
+  }
+  if (Array.isArray(value.maOrders) && value.maOrders.length) {
+    const MA_ORDER_LABELS = { bull: "MA25>MA144>MA169", bear: "MA25<MA144<MA169", mixed: "三线纠缠" };
+    parts.push(value.maOrders.map((item) => MA_ORDER_LABELS[item] || item).join("、"));
+  }
+  if (Array.isArray(value.alignments) && value.alignments.length) {
+    const ALIGNMENT_LABELS = { bull: "多头排列", bear: "空头排列", mixed: "混合排列" };
+    parts.push(value.alignments.map((item) => ALIGNMENT_LABELS[item] || item).join("、"));
+  }
+  if (Array.isArray(value.signatures) && value.signatures.length) {
+    parts.push(value.signatures.map((item) => signatureText(item, "")).filter(Boolean).join(" / "));
+  }
   if (value.includeDeleted === true) parts.push("含已删除");
   if (Array.isArray(value.symbols) && value.symbols.length) {
     parts.push("品种：" + value.symbols.join("、"));
@@ -331,11 +447,34 @@ function filterPartsText(filters) {
   return parts.length ? parts.join(" · ") : "全部信号";
 }
 
+function offsetLabel(offset) {
+  if (offset === 0) return "同周期";
+  return offset > 0 ? `父级+${offset}` : `子级${offset}`;
+}
+
 function conditionText(condition) {
-  const parts = [factorLabel(condition.factorKey), filterPartsText(condition.filters)];
+  const layerLabel = condition.layer === "event"
+    ? "事件："
+    : condition.layer === "pool" || condition.role === "context"
+      ? "池子："
+      : "";
+  const parts = [layerLabel + factorLabel(condition.factorKey), filterPartsText(condition.filters)];
   if (condition.role === "context") {
     const joinParts = [];
-    if (Number(condition.frequencyOffset) === 1) joinParts.push("父级周期");
+    const targets = Array.isArray(condition.targetFrequencies)
+      ? condition.targetFrequencies
+      : [];
+    const offsets = Array.isArray(condition.frequencyOffsets)
+      ? condition.frequencyOffsets
+      : [Number(condition.frequencyOffset) || 0];
+    if (targets.length) {
+      joinParts.push(`目标级别：${targets.map(frequencyLabel).join("/")}`);
+    }
+    if (offsets.length > 1) {
+      joinParts.push(`任一级：${offsets.map(offsetLabel).join("/")}`);
+    } else if (!targets.length) {
+      joinParts.push(offsetLabel(offsets[0]));
+    }
     if (condition.sideRule === "below") joinParts.push("门价在下方");
     if (condition.sideRule === "above") joinParts.push("门价在上方");
     if (joinParts.length) parts.push(joinParts.join(" · "));
@@ -399,6 +538,39 @@ function subscriptionMatchMeta(match) {
   }
   if (walk) parts.push(`走${walk}`);
   if (direction) parts.push(directionLabel(direction));
+  if (match.alignment) {
+    const ALIGNMENT_LABELS = { bull: "多头排列", bear: "空头排列", mixed: "混合排列" };
+    parts.push(ALIGNMENT_LABELS[match.alignment] || match.alignment);
+  }
+  if (match.priceZone) {
+    const PRICE_ZONE_LABELS = { above_all: "价在三线之上", below_all: "价在三线之下", inside: "价夹在三线之间" };
+    parts.push(PRICE_ZONE_LABELS[match.priceZone] || match.priceZone);
+  }
+  if (match.maOrder) {
+    const MA_ORDER_LABELS = { bull: "MA25>MA144>MA169", bear: "MA25<MA144<MA169", mixed: "三线纠缠" };
+    parts.push(MA_ORDER_LABELS[match.maOrder] || match.maOrder);
+  }
+  if (match.signature) {
+    const sigText = signatureText(match.signature, match.frequency);
+    if (sigText) parts.push(sigText);
+  }
+  if (match.relations && typeof match.relations === "object") {
+    const RELATION_LABELS = {
+      price_ma25: "C-25", price_ma144: "C-144", price_ma169: "C-169",
+      ma25_ma144: "25-144", ma25_ma169: "25-169", ma144_ma169: "144-169",
+      ma25_ma52: "25-52", ma25_ma208: "25-208", ma25_ma832: "25-832",
+      ma144_ma52: "144-52", ma144_ma208: "144-208", ma144_ma832: "144-832",
+      ma169_ma52: "169-52", ma169_ma208: "169-208", ma169_ma832: "169-832",
+    };
+    const RELATION_STATE_LABELS = { above: "上", near: "贴", below: "下" };
+    const relationText = Object.keys(match.relations).map((key) => {
+      const rel = match.relations[key] || {};
+      const state = RELATION_STATE_LABELS[rel.state] || rel.state || "?";
+      const pct = (rel.pct === null || rel.pct === undefined) ? "" : ` ${rel.pct}%`;
+      return `${RELATION_LABELS[key] || key}:${state}${pct}`;
+    });
+    if (relationText.length) parts.push(relationText.join(" · "));
+  }
   if (match.changePercent !== null && match.changePercent !== undefined) {
     const prefix = Number(match.changePercent) > 0 ? "+" : "";
     parts.push(prefix + match.changePercent + "%");
@@ -411,6 +583,15 @@ function subscriptionMatchMeta(match) {
   }
   for (const context of match.contexts || []) {
     if (!context || !Array.isArray(context.matches)) continue;
+    const factorKey = String(context.factorKey || "");
+    if (factorKey.endsWith("_ma_triple")) {
+      for (const row of context.matches.slice(0, 3)) {
+        if (!row || !row.frequency) continue;
+        const ORDER_LABELS = { bull: "25>144>169", bear: "25<144<169", mixed: "三线纠缠" };
+        parts.push(`池@${frequencyLabel(row.frequency)} ${ORDER_LABELS[row.maOrder] || row.maOrder || "?"}`);
+      }
+      continue;
+    }
     for (const gate of context.matches) {
       if (!gate) continue;
       const gateType = gateTypeLabel(gate.gateType);
@@ -559,6 +740,12 @@ function buildSubscriptionCard(sub) {
 
   card.appendChild(head);
   card.appendChild(meta);
+  if (sub.structureComplete === false) {
+    const warnEl = document.createElement("div");
+    warnEl.className = "sub-error";
+    warnEl.textContent = `结构不完整：${(sub.missingParts || []).join("；")}。请到 Agent 补充。`;
+    card.appendChild(warnEl);
+  }
   if (sub.error) {
     const errEl = document.createElement("div");
     errEl.className = "sub-error";
@@ -666,6 +853,16 @@ function setSubscriptionRefreshHint(seconds) {
   subscriptionRefreshHintEl.textContent = `目前是 ${value > 0 ? value : 30} 秒一刷新`;
 }
 
+async function loadSubscriptionMeta() {
+  // 先只拉订阅定义（DB，不评估因子），让侧栏立即出现订阅条目。
+  try {
+    const data = await api("/api/v1/signal-subscriptions");
+    renderSubscriptionSnapshot((data && data.subscriptions) || []);
+  } catch (_e) {
+    // 慢速 matches 接口失败时仍会给出提示；这里不打断页面。
+  }
+}
+
 async function loadSubscriptions() {
   try {
     const data = await api("/api/v1/signal-subscriptions/matches");
@@ -748,6 +945,13 @@ loginForm.addEventListener("submit", async (ev) => {
       method: "POST",
       body: JSON.stringify({ token }),
     });
+    try {
+      const clean = new URL(window.location.href);
+      if (clean.searchParams.has("token")) {
+        clean.searchParams.delete("token");
+        window.history.replaceState(null, "", clean.pathname + clean.search + clean.hash);
+      }
+    } catch (_e) {}
     showChat(data.token);
   } catch (err) {
     addMessage("error", err.message);
@@ -762,17 +966,19 @@ chatForm.addEventListener("submit", async (ev) => {
   sendBtn.disabled = true;
   chatInput.value = "";
   history.push({ role: "user", content: text });
-  addMessage("user", text);
+  addMessage("user", text, { scroll: "force" });
 
-  const assistantEl = addMessage("assistant", "");
+  const assistantEl = addMessage("assistant", "", { scroll: "force" });
   const toolRow = addToolRow();
 
   try {
+    chatAbortController = new AbortController();
     const resp = await fetch("/api/chat", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: [{ role: "user", content: text }], factorKeys: getLoadedFactorKeys(), persistHistory: true }),
+      signal: chatAbortController.signal,
     });
     if (!resp.ok) {
       const body = await resp.json().catch(() => ({}));
@@ -796,7 +1002,7 @@ chatForm.addEventListener("submit", async (ev) => {
         if (event.event === "delta") {
           assistantText += event.data.text || "";
           assistantEl.textContent = assistantText;
-          messagesEl.scrollTop = messagesEl.scrollHeight;
+          scrollToBottom(false);
         } else if (event.event === "tool_call") {
           addChip(toolRow, `工具：${event.data.name}`, "");
         } else if (event.event === "tool_result") {
@@ -819,11 +1025,43 @@ chatForm.addEventListener("submit", async (ev) => {
       history.push({ role: "assistant", content: "（模型未返回文本）" });
     }
   } catch (err) {
-    addMessage("error", err.message);
+    if (err && err.name === "AbortError") {
+      // 页面离开时主动取消；回来后 boot() 会从服务器历史恢复。
+    } else {
+      addMessage("error", err.message);
+    }
   } finally {
     streaming = false;
     sendBtn.disabled = false;
+    chatAbortController = null;
     chatInput.focus();
+  }
+});
+
+function teardownPageConnections() {
+  if (chatAbortController) {
+    chatAbortController.abort();
+    chatAbortController = null;
+  }
+  if (subscriptionStream) {
+    subscriptionStream.close();
+    subscriptionStream = null;
+  }
+  streaming = false;
+  if (sendBtn) sendBtn.disabled = false;
+  if (chatInput) chatInput.disabled = false;
+}
+
+window.addEventListener("pagehide", () => {
+  teardownPageConnections();
+});
+
+window.addEventListener("pageshow", (event) => {
+  // 浏览器 bfcache 恢复页面时，原 SSE 流已经断了，但页面 DOM 还停留在“输出中”。
+  // 强制重新拉会话，恢复登录态并刷新聊天历史。
+  if (event.persisted) {
+    teardownPageConnections();
+    boot();
   }
 });
 

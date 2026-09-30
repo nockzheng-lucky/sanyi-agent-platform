@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 from ..factor_registry import registry
+from ..factors.v4_common import ALL_MA_RELATION_KEYS
 from ..push_channels import get_pushplus_channel
 from ..signal_subscriptions import (
     create_signal_subscription,
@@ -20,6 +21,7 @@ from ..signal_subscriptions import (
     list_signal_subscriptions,
     user_id_from_record,
 )
+from ..strategy_model import FREQUENCY_LEVELS
 from .filter_store import (
     clear_filters,
     get_filter_state,
@@ -36,7 +38,7 @@ def build_tools(for_record: Optional[Dict[str, Any]] = None) -> List[Dict[str, A
         "frequencies": {
             "type": ["array", "null"],
             "items": {"type": "string"},
-            "description": "周期过滤，例如 [\"15m\"]；null 表示清除该限制。",
+            "description": "周期过滤，例如 [\"15m\"]；支持 1m/5m/15m/30m/1h/1d/1w/1M，null 表示清除该限制。",
         },
         "symbols": {
             "type": ["array", "null"],
@@ -131,8 +133,140 @@ def build_tools(for_record: Optional[Dict[str, Any]] = None) -> List[Dict[str, A
         "limit": {
             "type": ["integer", "null"],
             "minimum": 1,
-            "maximum": 100,
+            "maximum": 1000,
             "description": "最多返回条数；null 表示清除该限制。",
+        },
+        "attacks": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["long", "short"]},
+            "description": "RSI3 进攻过滤；long=>80，short=<20。",
+        },
+        "maNames": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["ma52", "ma208", "ma832"]},
+            "description": "均线过滤：ma52 / ma208 / ma832；跨组比较请用 relations。",
+        },
+        "relations": {
+            "type": ["array", "null"],
+            "items": {
+                "type": "string",
+                "enum": list(ALL_MA_RELATION_KEYS),
+            },
+            "description": (
+                "MA 关系筛选。左侧相对右侧：ma169_ma208 + relationStates=above 表示 MA169>MA208；"
+                "below 表示 MA169<MA208。跨组键同时适用于均线 MA 与 MA25/144/169 两个因子。"
+            ),
+        },
+        "relationStates": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["above", "near", "below"]},
+            "description": "MA 关系状态过滤：above=左侧在上方；below=左侧在下方；near=贴线（容差 tolerancePct）。",
+        },
+        "relationCrosses": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["cross_up", "cross_down", "none"]},
+            "description": "价格穿均线或均线间金叉/死叉过滤。",
+        },
+        "requireAllRelations": {
+            "type": ["boolean", "null"],
+            "description": "true=所有选中关系都必须满足 relationStates/relationCrosses；默认 false=任一满足。",
+        },
+        "tolerancePct": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 50,
+            "description": "MA 关系贴线容差（%），默认 0.05。",
+        },
+        "priceZones": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["above_all", "below_all", "inside"]},
+            "description": "收盘价相对 MA25/144/169 三线位置：above_all/below_all/inside。",
+        },
+        "maOrders": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["bull", "bear", "mixed"]},
+            "description": "MA25/144/169 三线排列：bull/bear/mixed。",
+        },
+        "alignments": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["bull", "bear", "mixed"]},
+            "description": "收盘价与 MA25/144/169 完整排列：bull/bear/mixed。",
+        },
+        "signatures": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+            "description": "六位签名过滤，如 [\"++++++\", \"------\"]；顺序 C-25,C-144,C-169,25-144,25-169,144-169。",
+        },
+        "priceSides": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["above", "below", "equal"]},
+            "description": "收盘价相对均线：above=上方，below=下方，equal=相交。",
+        },
+        "priceCrosses": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["cross_up", "cross_down", "none"]},
+            "description": "本根收盘价穿越均线方向。",
+        },
+        "pairCrosses": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+            "description": "均线间交叉事件过滤，例如 [\"ma52_cross_up_ma208\"]。",
+        },
+        "ma52AboveMa208": {
+            "type": ["boolean", "null"],
+            "description": "均线关系过滤；true=MA52 在 MA208 上方，false=MA52 在 MA208 下方，null 表示不启用。",
+        },
+        "ma52AboveMa832": {
+            "type": ["boolean", "null"],
+            "description": "均线关系过滤；true=MA52 在 MA832 上方，false=MA52 在 MA832 下方，null 表示不启用。",
+        },
+        "ma208AboveMa832": {
+            "type": ["boolean", "null"],
+            "description": "均线关系过滤；true=MA208 在 MA832 上方，false=MA208 在 MA832 下方，null 表示不启用。",
+        },
+        "allowMissingMaRelation": {
+            "type": ["boolean", "null"],
+            "description": "当任一均线上下/关系条件启用且该关系因历史不足为 null 时，true=放行并在推送中标注“未确认”，false=不命中。",
+        },
+        "difSides": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["positive", "negative", "zero"]},
+            "description": "MACD DIF 域过滤。",
+        },
+        "histSides": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["positive", "negative", "zero"]},
+            "description": "MACD HIST 域过滤。",
+        },
+        "difCrosses": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["cross_up", "cross_down", "none"]},
+            "description": "DIF 零轴穿越方向过滤。",
+        },
+        "histCrosses": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["cross_up", "cross_down", "none"]},
+            "description": "HIST 零轴穿越方向过滤。",
+        },
+        "edges": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["open", "close"]},
+            "description": "门边沿过滤；open=开门，close=关门。",
+        },
+        "formations": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["门上", "门下"]},
+            "description": "门形成位置过滤。",
+        },
+        "positions": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["above", "below"]},
+            "description": "门价相对均线位置过滤。",
+        },
+        "roles": {
+            "type": ["array", "null"],
+            "items": {"type": "string", "enum": ["parent", "child"]},
+            "description": "跨级别角色过滤：parent=父级，child=子级。",
         },
     }
     return [
@@ -225,8 +359,18 @@ def build_tools(for_record: Optional[Dict[str, Any]] = None) -> List[Dict[str, A
                     "快照因子只用于查询，不能订阅。用户要求“订阅/持续监控/有信号提醒我”时，"
                     "先复述筛选条件并向用户确认；用户明确确认后再调用本工具。"
                     "单因子订阅用 factorKey+filters；用户要求“叠加/同时满足/交叉匹配/结合门条件”时，"
-                    "必须用 conditions 创建一个订阅（第一条是 primary，其余是 context，全部 AND），"
-                    "不要创建多个订阅让用户自行交叉。"
+                    "必须用 conditions 创建一个订阅。触发型订阅标准结构是："
+                    "1 个 event 事件条件（primary，定义上穿/下穿/开关门那一下）+ 0..N 个 pool 候选池条件"
+                    "（context，定义背景状态，例如父级多头/大级别多头）。"
+                    "用户只给了事件条件时，平台会自动补一个同品种、同周期的全市场候选池，"
+                    "不需要为补池追问，也不要在没有背景条件时强行编造 pool 条件；"
+                    "如果用户明确给了状态池而没有事件动作，按 pool 模式处理。不要创建多个订阅让用户自行交叉。"
+                    "不同 condition 之间是 AND；同一个 context condition 内部的 frequencyOffsets / "
+                    "targetFrequencies 是任一命中即可。用户要求“统一锚定 1 小时”时用 "
+                    "targetFrequencies=[\"1h\"]，不要在每条 primary 上分别算 offset；"
+                    "用户要求“父级逐级往上找、有一级满足就行”时用 frequencyOffsets=[1,2,3]。"
+                    "用户说“只要满足状态就一直看着/池子/大级别多头”时，mode 用 pool；"
+                    "用户说“上穿/下穿/开关门那一下才提醒”时，mode 用 trigger 或省略（auto 自动判定）。"
                 ),
                 "parameters": {
                     "type": "object",
@@ -242,6 +386,11 @@ def build_tools(for_record: Optional[Dict[str, Any]] = None) -> List[Dict[str, A
                             "additionalProperties": False,
                         },
                         "name": {"type": "string", "description": "订阅名称，例如“走2破20诀 + 下方有效地门”。"},
+                        "mode": {
+                            "type": "string",
+                            "enum": ["auto", "trigger", "pool"],
+                            "description": "auto=按条件自动判定；trigger=只有动作发生那一下推送；pool=状态池，入池推送、出池移除。",
+                        },
                         "conditions": {
                             "type": "array",
                             "description": "组合订阅条件（AND）。单因子订阅不要传。",
@@ -259,12 +408,42 @@ def build_tools(for_record: Optional[Dict[str, Any]] = None) -> List[Dict[str, A
                                         "enum": ["primary", "context"],
                                         "description": "第一条默认 primary，后续默认 context。",
                                     },
+                                    "layer": {
+                                        "type": "string",
+                                        "enum": ["event", "pool"],
+                                        "description": "event=事件条件；pool=候选池条件。默认按 role 自动映射。",
+                                    },
                                     "joinWith": {"type": "string", "enum": ["primary"], "description": "默认 primary。"},
                                     "joinSymbol": {"type": "string", "enum": ["symbol"], "description": "默认 symbol==symbol。"},
                                     "frequencyOffset": {
                                         "type": "integer",
-                                        "enum": [0, 1],
-                                        "description": "0=同周期；1=父级周期（15m→1h、1h→1d）。",
+                                        "minimum": -6,
+                                        "maximum": 6,
+                                        "description": (
+                                            "0=同周期；+N=向上 N 级父周期（15m +1=1h、+2=1d、+3=1w）；"
+                                            "-N=向下 N 级子周期（15m -1=5m、-2=1m）。"
+                                            "相对阶梯为 1m/5m/15m/1h/1d/1w/1M；30m 是绝对级别，"
+                                            "如需 30m 请直接写 frequencies=[\"30m\"] 或 targetFrequencies=[\"30m\"]，"
+                                            "30m 条件自身 +1=1h、-1=15m。超出边界的不命中。"
+                                        ),
+                                    },
+                                    "frequencyOffsets": {
+                                        "type": "array",
+                                        "items": {"type": "integer", "minimum": -6, "maximum": 6},
+                                        "maxItems": 8,
+                                        "description": (
+                                            "多级偏移，同一个 context 条件内任一命中即可。"
+                                            "例如 [1,2,3] 表示父级 +1/+2/+3 里只要有一个满足就通过。"
+                                        ),
+                                    },
+                                    "targetFrequencies": {
+                                        "type": "array",
+                                        "items": {"type": "string", "enum": list(FREQUENCY_LEVELS)},
+                                        "maxItems": 8,
+                                        "description": (
+                                            "绝对目标级别，不随 primary 周期变化。例如 [\"1h\"] 时，"
+                                            "1m/5m/15m 的触发都统一锚定 1 小时条件。"
+                                        ),
                                     },
                                     "sideRule": {
                                         "type": "string",
@@ -276,10 +455,27 @@ def build_tools(for_record: Optional[Dict[str, Any]] = None) -> List[Dict[str, A
                                         "properties": {
                                             "joinWith": {"type": "string", "enum": ["primary"]},
                                             "joinSymbol": {"type": "string", "enum": ["symbol"]},
-                                            "frequencyOffset": {"type": "integer", "enum": [0, 1]},
+                                            "frequencyOffset": {
+                                                "type": "integer",
+                                                "minimum": -6,
+                                                "maximum": 6,
+                                                "description": "+N=父级；-N=子级；0=同周期。",
+                                            },
+                                            "frequencyOffsets": {
+                                                "type": "array",
+                                                "items": {"type": "integer", "minimum": -6, "maximum": 6},
+                                                "maxItems": 8,
+                                                "description": "多级偏移，同一条件内任一命中即可。",
+                                            },
+                                            "targetFrequencies": {
+                                                "type": "array",
+                                                "items": {"type": "string", "enum": list(FREQUENCY_LEVELS)},
+                                                "maxItems": 8,
+                                                "description": "绝对目标级别，例如 [\"1h\"] 统一锚定小时级别。",
+                                            },
                                             "sideRule": {"type": "string", "enum": ["below", "above"]},
                                         },
-                                        "description": "嵌套写法：join.frequencyOffset / join.sideRule 与顶层字段等价。",
+                                        "description": "嵌套写法：join.frequencyOffset / join.frequencyOffsets / join.targetFrequencies 与顶层字段等价。",
                                     },
                                 },
                                 "required": ["factorKey"],
@@ -371,6 +567,9 @@ async def execute_tool(name: str, arguments: Dict[str, Any], token_record: dict)
         if name == "sanyi_create_subscription":
             conditions = arguments.get("conditions")
             name = str(arguments.get("name") or "")
+            mode = str(arguments.get("mode") or "auto").strip()
+            if mode not in ("auto", "trigger", "pool"):
+                return {"error": "mode 只支持 auto / trigger / pool"}
             if isinstance(conditions, list) and conditions:
                 for condition in conditions:
                     if isinstance(condition, dict) and condition.get("factorKey"):
@@ -381,6 +580,7 @@ async def execute_tool(name: str, arguments: Dict[str, Any], token_record: dict)
                     token_record,
                     conditions=conditions,
                     name=name,
+                    mode=mode,
                 )
             else:
                 factor_key = str(arguments.get("factorKey") or "").strip()
@@ -397,10 +597,11 @@ async def execute_tool(name: str, arguments: Dict[str, Any], token_record: dict)
                     factor_key=factor_key,
                     filters=filters,
                     name=name,
+                    mode=mode,
                 )
             return {
                 "subscription": created,
-                "message": "订阅已创建，匹配信号会出现在聊天页左侧的订阅信号列表",
+                "message": "订阅已创建，匹配信号会出现在聊天页左侧的订阅信号列表和「策略订阅」页",
             }
 
         if name == "sanyi_list_subscriptions":

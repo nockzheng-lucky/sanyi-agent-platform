@@ -44,6 +44,8 @@ class FactorSpec:
     shadow_only: bool = False
     domain: str = "futures"
     event_based: bool = True
+    kind: str = "basic"
+    group: str = ""
 
     def descriptor(self) -> Dict[str, Any]:
         return {
@@ -60,6 +62,8 @@ class FactorSpec:
             "shadowOnly": self.shadow_only,
             "domain": self.domain,
             "eventBased": self.event_based,
+            "kind": self.kind,
+            "group": self.group,
         }
 
 

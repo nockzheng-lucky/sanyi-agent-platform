@@ -1,94 +1,39 @@
-# sanyi-agent-platform
+# 101 部署候选说明
 
-三易引擎数据 Agent 开放平台骨架（原型）。
+> 本目录只是候选部署文件。101 是生产机，必须由对应 Line Owner 走正式部署流程；
+> 本仓库不会直接执行 SSH、systemd 或任何生产写入。
 
-核心模式是“门信号也是一个因子”：
+## 目录（独立于 sanyi）
 
+```text
+/home/ubuntu/sanyi-agent-platform/
+├── .env                 # 从 deploy/.env.production.example 复制，填 LLM_API_KEY
+├── data/                # SQLite：令牌/日志/信号事件，由 systemd ReadWritePaths 放行
+├── app/                 # 应用代码（git checkout）
+└── .venv/               # Python 虚拟环境
 ```
-sanyi green gate_events.sqlite3（只读，与热力图今日门信号同源）
-  → 轮询器筛选当天：地门 + 5m/15m/1h + formation(门上)/open
-  → 新信号写入 signal_events
-  → 因子 dimen_gate_signal 读取最近门信号
-  → 用户在左侧因子列表加载因子，Agent 用自然语言查询/组合筛选条件
-```
 
-Agent 页不再内置实时信号卡片；门信号与“诀与破诀”一样，统一走
-因子列表 → 加载到 Agent → 自然语言查询的流程。
+## 只读边界
 
-同时保留查询接口 `/api/v1/factors/evaluate`，页面 Agent 与用户自己的
-Agent 共用同一契约：REST（`X-API-Token`）、MCP（`sanyi-mcp`）、
-Skill（`docs/factors/`）三层开放。
+- 读：`/home/ubuntu/projects/sanyi-green/runtime/state/gate_events.sqlite3`
+- 写：仅 `/home/ubuntu/sanyi-agent-platform/data`
+- 不写、不删除、不改动 `/home/ubuntu/projects/sanyi*` 下任何内容。
 
-成本口径：
-- 轮询读 SQLite **不消耗任何 LLM token，也不扣用户额度**；
-- 收费为月费订阅；因子调用和信号查询不逐次扣费，只做用量审计；
-- DeepSeek token 只在用户与 Agent 实际对话时产生。
-
-## 目录
-
-- `app/`：FastAPI 应用
-  - `app/main.py`：入口
-  - `app/factor_registry.py`：因子注册表（单一事实来源）
-  - `app/factors/dimen_gate_signal.py`：地门信号因子（读取事件，不重算引擎）
-  - `app/factors/jue_direction.py`：诀与破诀因子（qh 全品种诀方向）
-    - `app/factors/crypto_market.py`：币圈行情因子（影子模式专用）
-  - `app/engine/`：门信号读取、交易时段、轮询、SSE 总线（供外部接入）
-  - `app/agent/filter_store.py`：Agent 自然语言筛选条件存储
-  - `app/composite_evaluator.py`：组合订阅条件评估（primary + context，AND 交叉匹配）
-  - `app/api/`：健康检查、令牌、因子、信号事件、聊天接口
-  - `app/agent/`：LLM 客户端与 function-calling 循环
-  - `app/mcp/`：面向用户 Agent 的 MCP stdio 服务
-  - `app/web/`：聊天页面静态资源
-- `docs/`：架构、安全合规、MCP 接入说明、Skill 文档
-- `scripts/create_token.py`：签发测试令牌
-- `scripts/set_shadow_mode.py`：设置影子模式账号
-- `tests/`：骨架冒烟测试
-
-## 快速启动
+## 上线命令（供部署 Owner 参考，非自动执行）
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e .
-cp .env.example .env
-# 必填：SANYI_GATE_EVENTS_DB 指向 sanyi-green 的 gate_events.sqlite3
-# 按需填写 LLM_API_KEY；本地联调可 LLM_MOCK=1
-python scripts/create_token.py --name dev --quota 100000
-uvicorn app.main:app --reload --port 8100
+sudo mkdir -p /home/ubuntu/sanyi-agent-platform/data
+sudo chown -R ubuntu:ubuntu /home/ubuntu/sanyi-agent-platform
+sudo cp deploy/sanyi-agent-platform.service /etc/systemd/system/sanyi-agent-platform.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now sanyi-agent-platform
+systemctl status sanyi-agent-platform
+journalctl -u sanyi-agent-platform -n 50
 ```
 
-打开 `http://127.0.0.1:8100/chat?token=sk-...` 即可测试页面 Agent。
+## 验收
 
-给用户自己的 Agent 接 MCP：
-- 远程端点：`POST /api/v1/mcp`（Header `X-API-Token: sk-sanyi-...`）；
-- 本地 stdio 代理：
-
-```bash
-SANYI_BASE_URL=http://127.0.0.1:8100 \
-SANYI_API_TOKEN=sk-sanyi-... \
-python -m app.mcp
-```
-
-详细配置见 `docs/mcp.md`。
-
-## 当前状态
-
-- [x] 令牌签发（SQLite，本地原型）
-- [x] 因子注册表 + 统一 evaluate 接口
-- [x] 门信号读取 + 交易时段 + 30 秒轮询 + 新事件去重
-- [x] 页面 Agent（DeepSeek/OpenAI 兼容 function calling）
-- [x] 服务端会话历史：按账户持久化，切页/刷新后自动恢复
-- [x] 因子列表 + 加载到 Agent + 自然语言组合/调整筛选条件
-- [x] 持续信号订阅：Agent 确认后，聊天页左侧订阅面板持续显示匹配信号
-- [x] 订阅全面事件化：只有 `eventBased=true` 的因子可创建订阅，快照因子仅用于查询；新因子默认事件线
-- [x] 组合订阅条件层：primary + context 多因子 AND 交叉匹配（如“走2破20诀 + 下方有效地门”）
-- [x] Pushplus 推送：按订阅动态推送新匹配信号（用户绑定自己的 token）
-- [x] 因子：地门信号 `dimen_gate_signal`、诀与破诀 `jue_direction`
-- [x] 因子：门条件 `gate_condition`、期货今日门信号 `futures_gate_signal`、走法×破诀组合 `wave_jue_combo`（当前快照版）
-- [x] 影子模式：158 管理员专属币圈行情因子 `crypto_market`
-- [x] 币圈因子对齐：`crypto_gate_condition`（币圈门条件）、`crypto_gate_signal`（币圈今日开门事件）、`crypto_wave_jue_combo`（币圈走法×破诀组合）
-- [x] 币圈建议杠杆：ETH=50x 锚定，按波动率反比换算，下限 10x / 上限 50x
-- [x] `SANYI_GATE_EVENTS_DB` 接生产 SQLite 联调
-- [x] 真实 LLM 联调（DeepSeek key 到位后填 `.env`）
-- [x] MCP stdio 服务端 + Skill 文档（REST / MCP / Skill 三层开放）
-- [ ] 接入 New API / 支付 / 订阅（当前礼品卡为 MOCK）
+1. `curl http://127.0.0.1:8100/api/health` 返回 code=0；
+2. 日志出现信号轮询 baseline，无读/写权限报错；
+3. 交易时段新地门信号出现后，页面 `/chat` 弹出信号卡片；
+4. 页面聊天调用 `deepseek-v4-flash` 正常流式返回。

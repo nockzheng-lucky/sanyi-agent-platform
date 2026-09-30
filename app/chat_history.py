@@ -29,11 +29,55 @@ def append_chat_messages(owner: str, messages: List[Dict[str, Any]]) -> None:
         if role not in ("user", "assistant") or not content:
             continue
         conn.execute(
-            "INSERT INTO chat_history(owner_key, role, content, created_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO chat_history(owner_key, role, content, created_at, is_pending)"
+            " VALUES (?, ?, ?, ?, 0)",
             (owner, role, content, now),
         )
     conn.commit()
-    # 只保留最近 HISTORY_LIMIT 条，避免无限增长。
+    _prune_history(owner)
+
+
+def update_pending_assistant(owner: str, content: str) -> None:
+    """增量保存正在生成的回答。
+
+    页面切走/刷新时，未完成的回答也能从历史里恢复出来，不会被丢掉。
+    """
+    content = str(content or "")
+    if not content:
+        return
+    now = _now_iso()
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id FROM chat_history WHERE owner_key = ? AND role = 'assistant'"
+        " AND is_pending = 1 ORDER BY id DESC LIMIT 1",
+        (owner,),
+    ).fetchone()
+    if row is not None:
+        conn.execute(
+            "UPDATE chat_history SET content = ?, created_at = ? WHERE id = ?",
+            (content, now, row["id"]),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO chat_history(owner_key, role, content, created_at, is_pending)"
+            " VALUES (?, 'assistant', ?, ?, 1)",
+            (owner, content, now),
+        )
+    conn.commit()
+
+
+def finalize_pending_assistant(owner: str) -> None:
+    """把最后一次未完成的回答标记为正常历史。"""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE chat_history SET is_pending = 0 WHERE owner_key = ? AND is_pending = 1",
+        (owner,),
+    )
+    conn.commit()
+
+
+def _prune_history(owner: str) -> None:
+    conn = get_conn()
     conn.execute(
         "DELETE FROM chat_history WHERE owner_key = ? AND id NOT IN ("
         " SELECT id FROM chat_history WHERE owner_key = ? ORDER BY id DESC LIMIT ?"

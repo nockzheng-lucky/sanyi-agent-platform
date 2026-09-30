@@ -20,8 +20,6 @@ async def list_factors(
     domain = (domain or "").strip()
     if domain and domain not in ("futures", "crypto"):
         raise HTTPException(status_code=422, detail={"code": 422, "message": "domain 仅支持 futures / crypto", "data": None})
-    if domain == "crypto" and not is_shadow_mode(token):
-        raise HTTPException(status_code=403, detail={"code": 403, "message": "影子模式未开放", "data": None})
     return ApiResponse(data={"factors": registry.descriptors(for_record=token, domain=domain or None)})
 
 

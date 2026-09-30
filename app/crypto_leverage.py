@@ -18,6 +18,7 @@ import httpx
 
 from .config import (
     CRYPTO_CONNECT_TIMEOUT_SECONDS,
+    CRYPTO_KLINES_API_URL,
     CRYPTO_LEVERAGE_ANCHOR_LEVERAGE,
     CRYPTO_LEVERAGE_ANCHOR_SYMBOL,
     CRYPTO_LEVERAGE_CACHE_SECONDS,
@@ -30,6 +31,8 @@ from .config import (
 
 _CACHE: Dict[str, Dict[str, Any]] = {}
 _VOLATILITY_MAP_CACHE: Dict[str, Any] = {"_at": 0.0, "items": None}
+_VOLATILITY_MAP_FAILED_AT: float = 0.0
+_VOLATILITY_MAP_FAILURE_COOLDOWN = 90.0
 _VOLATILITY_MAP_LOCK = asyncio.Lock()
 _ATR_PERIOD = 14
 _DAY_BARS = 24
@@ -203,22 +206,57 @@ async def _fetch_volatility_map() -> Optional[List[Dict[str, Any]]]:
     return items if isinstance(items, list) else None
 
 
+async def _fetch_symbol_bars(symbol: str) -> Optional[List[Dict[str, Any]]]:
+    """批接口冷缓存超时时的兜底：只拉当前信号品种自己的 1h K 线算波动率。"""
+    if not CRYPTO_KLINES_API_URL or not symbol:
+        return None
+    url = "%s/%s/1h" % (CRYPTO_KLINES_API_URL, symbol)
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(
+            CRYPTO_TIMEOUT_SECONDS,
+            connect=min(CRYPTO_CONNECT_TIMEOUT_SECONDS, CRYPTO_TIMEOUT_SECONDS),
+        ),
+        verify=CRYPTO_VERIFY_SSL,
+    ) as client:
+        try:
+            response = await client.get(url, params={"profile": "full"})
+        except httpx.HTTPError:
+            return None
+    if response.status_code != 200:
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    bars = payload.get("bars") if isinstance(payload, dict) else None
+    return bars if isinstance(bars, list) else None
+
+
 async def _ensure_volatility_map() -> Optional[List[Dict[str, Any]]]:
+    global _VOLATILITY_MAP_FAILED_AT
     now = time.monotonic()
     if _VOLATILITY_MAP_CACHE["items"] is not None and now - _VOLATILITY_MAP_CACHE["_at"] < CRYPTO_LEVERAGE_CACHE_SECONDS:
         return _VOLATILITY_MAP_CACHE["items"]
+    # 批接口刚失败过: 短冷却期内不再重复等它超时, 直接走单币兜底。
+    if _VOLATILITY_MAP_CACHE["items"] is None and now - _VOLATILITY_MAP_FAILED_AT < _VOLATILITY_MAP_FAILURE_COOLDOWN:
+        return None
     async with _VOLATILITY_MAP_LOCK:
         now = time.monotonic()
         if _VOLATILITY_MAP_CACHE["items"] is not None and now - _VOLATILITY_MAP_CACHE["_at"] < CRYPTO_LEVERAGE_CACHE_SECONDS:
             return _VOLATILITY_MAP_CACHE["items"]
+        if _VOLATILITY_MAP_CACHE["items"] is None and now - _VOLATILITY_MAP_FAILED_AT < _VOLATILITY_MAP_FAILURE_COOLDOWN:
+            return None
         items = await _fetch_volatility_map()
         if items is not None:
             _VOLATILITY_MAP_CACHE["_at"] = time.monotonic()
             _VOLATILITY_MAP_CACHE["items"] = items
+            _VOLATILITY_MAP_FAILED_AT = 0.0
             for item in items:
                 if not isinstance(item, dict) or not item.get("sym"):
                     continue
                 _CACHE[str(item["sym"]).upper()] = {"_at": now, "metrics": item}
+        else:
+            _VOLATILITY_MAP_FAILED_AT = time.monotonic()
         return items
 
 
@@ -232,13 +270,24 @@ async def get_volatility(symbol: str) -> Optional[Dict[str, Any]]:
         return cached["metrics"]
 
     items = await _ensure_volatility_map()
-    if items is None:
-        return None
+    if items is not None:
+        metrics = _CACHE.get(symbol)
+        if metrics and now - metrics["_at"] < CRYPTO_LEVERAGE_CACHE_SECONDS:
+            return metrics["metrics"]
 
-    metrics = _CACHE.get(symbol)
-    if metrics and now - metrics["_at"] < CRYPTO_LEVERAGE_CACHE_SECONDS:
-        return metrics["metrics"]
-    return None
+    # 兜底：批接口没拿到或该币不在批结果里时，单拉 1h K 线现算。
+    bars = await _fetch_symbol_bars(symbol)
+    volatility = volatility_from_bars(bars) if bars else None
+    if volatility is None:
+        return None
+    metrics = {
+        "sym": symbol,
+        "atrPct": volatility["atrPct"],
+        "dayRangePct": volatility["dayRangePct"],
+        "volatilityPct": volatility["volatilityPct"],
+    }
+    _CACHE[symbol] = {"_at": time.monotonic(), "metrics": metrics}
+    return metrics
 
 
 async def _annotate_one(match: Dict[str, Any], eth_volatility: Optional[float]) -> Optional[Dict[str, Any]]:
@@ -261,13 +310,23 @@ async def _annotate_one(match: Dict[str, Any], eth_volatility: Optional[float]) 
 
 
 async def annotate_matches(matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """给币圈匹配行补充建议杠杆，并过滤“入 list 之前形成的老门”。"""
+    """给币圈匹配行补充建议杠杆。
+
+    旧版“入 list 之前形成的老门”过滤只服务于已退役的旧门事件因子；
+    v4 基础因子按最新已收盘快照计算，不再做该过滤，否则会把当前仍然有效的
+    地门/天门全部误判成历史门，导致订阅永远没有信号。
+
+    波动率数据缺失时使用保守下限，保证每条币圈推送都有建议杠杆字段。
+    """
     matches = [match for match in matches if isinstance(match, dict)]
     if not matches:
         return matches
 
     anchor = await get_volatility(CRYPTO_LEVERAGE_ANCHOR_SYMBOL)
     if not anchor:
+        for match in matches:
+            match["suggestedLeverage"] = CRYPTO_LEVERAGE_MIN
+            match["leverageFallback"] = True
         return matches
     eth_volatility = anchor["volatilityPct"]
 
@@ -282,11 +341,11 @@ async def annotate_matches(matches: List[Dict[str, Any]]) -> List[Dict[str, Any]
         return_exceptions=True,
     )
 
-    kept: List[Dict[str, Any]] = []
     for match, metrics in zip(matches, metrics_by_match):
         if isinstance(metrics, BaseException) or not isinstance(metrics, dict):
-            kept.append(match)
+            match["suggestedLeverage"] = CRYPTO_LEVERAGE_MIN
+            match["leverageFallback"] = True
             continue
-        if not _is_stale_gate(match, metrics):
-            kept.append(match)
-    return kept
+        # 只附加建议杠杆与波动率字段，不再按 selectedSince 删除匹配。
+        match["_leverage_metrics"] = metrics
+    return matches

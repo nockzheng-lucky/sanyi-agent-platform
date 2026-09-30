@@ -24,6 +24,19 @@ def _bool(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _int_list(name: str, default: str) -> list:
+    values = []
+    for raw in os.getenv(name, default).split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            values.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
 DATA_DIR = Path(os.getenv("SANYI_DATA_DIR", "./data")).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "platform.sqlite3"
@@ -136,11 +149,39 @@ CRYPTO_VERIFY_SSL = _bool("SANYI_CRYPTO_VERIFY_SSL", False)  # 该服务器证�
 CRYPTO_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_TIMEOUT_SECONDS", 30)
 CRYPTO_CONNECT_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_CONNECT_TIMEOUT_SECONDS", 15)
 
+# v4 基础因子批量投影（只读）：按 freq 扫描 factor_store manifest，不触发重算。
+FUTURES_FACTOR_SCAN_URL = os.getenv(
+    "SANYI_FUTURES_FACTOR_SCAN_URL",
+    "https://qh.shhghf.com/api/factors/scan",
+).strip().rstrip("/")
+FUTURES_FACTOR_SCAN_TIMEOUT_SECONDS = _int("SANYI_FUTURES_FACTOR_SCAN_TIMEOUT_SECONDS", 30)
+CRYPTO_FACTOR_SCAN_URL = os.getenv(
+    "SANYI_CRYPTO_FACTOR_SCAN_URL",
+    "https://167.179.69.189/api/factors/scan",
+).strip().rstrip("/")
+CRYPTO_FACTOR_SCAN_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_FACTOR_SCAN_TIMEOUT_SECONDS", 30)
+
+# 破诀机会（只读）：直接消费引擎已经算好的热力图破诀机会，不重算。
+FUTURES_JUE_OPPORTUNITY_URL = os.getenv(
+    "SANYI_FUTURES_JUE_OPPORTUNITY_URL",
+    "https://qh.shhghf.com/api/market/heatmap",
+).strip().rstrip("/")
+FUTURES_JUE_OPPORTUNITY_TIMEOUT_SECONDS = _int("SANYI_FUTURES_JUE_OPPORTUNITY_TIMEOUT_SECONDS", 30)
+CRYPTO_JUE_OPPORTUNITY_URL = os.getenv(
+    "SANYI_CRYPTO_JUE_OPPORTUNITY_URL",
+    "https://167.179.69.189/api/market/jue-opportunities",
+).strip().rstrip("/")
+CRYPTO_JUE_OPPORTUNITY_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_JUE_OPPORTUNITY_TIMEOUT_SECONDS", 30)
+
 # 币圈建议杠杆：以 ETH 的杠杆为锚，按波动率反比换算。
 CRYPTO_VOLATILITY_API_URL = os.getenv(
     "SANYI_CRYPTO_VOLATILITY_API_URL",
     "https://167.179.69.189/api/market/volatility",
 ).strip()
+CRYPTO_KLINES_API_URL = os.getenv(
+    "SANYI_CRYPTO_KLINES_API_URL",
+    "https://167.179.69.189/api/klines",
+).strip().rstrip("/")
 CRYPTO_LEVERAGE_ANCHOR_SYMBOL = os.getenv("SANYI_CRYPTO_LEVERAGE_ANCHOR_SYMBOL", "ETHUSDT")
 CRYPTO_LEVERAGE_ANCHOR_LEVERAGE = _int("SANYI_CRYPTO_LEVERAGE_ANCHOR_LEVERAGE", 50)
 CRYPTO_LEVERAGE_MIN = _int("SANYI_CRYPTO_LEVERAGE_MIN", 10)
@@ -150,6 +191,24 @@ CRYPTO_LEVERAGE_CACHE_SECONDS = _int("SANYI_CRYPTO_LEVERAGE_CACHE_SECONDS", 1800
 # Pushplus 推送：token 是用户级配置（user_push_channels 表），不使用全局 token。
 PUSHPLUS_ENABLED = _bool("SANYI_PUSHPLUS_ENABLED", True)
 PUSHPLUS_URL = os.getenv("SANYI_PUSHPLUS_URL", "https://www.pushplus.plus/send").strip()
-SIGNAL_SUBSCRIPTION_PUSH_SECONDS = _int("SANYI_SIGNAL_SUBSCRIPTION_PUSH_SECONDS", 60)
+SIGNAL_SUBSCRIPTION_PUSH_SECONDS = _int("SANYI_SIGNAL_SUBSCRIPTION_PUSH_SECONDS", 10)
+
+# Agent 订阅 -> 东京币圈自动交易桥。
+AGENT_TRADE_ENABLED = _bool("SANYI_AGENT_TRADE_ENABLED", False)
+AGENT_TRADE_SUBSCRIPTION_IDS = _int_list("SANYI_AGENT_TRADE_SUBSCRIPTION_IDS", "23")
+AGENT_TRADE_WEBHOOK_URL = os.getenv(
+    "SANYI_AGENT_TRADE_WEBHOOK_URL",
+    "https://167.179.69.189/api/trading/agent-signals",
+).strip().rstrip("/")
+AGENT_TRADE_WEBHOOK_SECRET_FILE = os.getenv(
+    "SANYI_AGENT_TRADE_WEBHOOK_SECRET_FILE",
+    "/etc/sanyi/agent-trade-webhook-secret",
+)
+AGENT_TRADE_TIMEOUT_SECONDS = _int("SANYI_AGENT_TRADE_TIMEOUT_SECONDS", 20)
+AGENT_TRADE_POLL_SECONDS = _int("SANYI_AGENT_TRADE_POLL_SECONDS", 10)
+AGENT_TRADE_VERIFY_SSL = _bool("SANYI_AGENT_TRADE_VERIFY_SSL", False)
+SIGNAL_NOTIFICATION_FEED_POLL_SECONDS = _int(
+    "SANYI_SIGNAL_NOTIFICATION_FEED_POLL_SECONDS", 10
+)
 
 SYSTEM_NAME = "三易引擎 Agent 平台"

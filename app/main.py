@@ -7,11 +7,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from .agent_trade_bridge import AgentTradeBridge
+from .agent_trade_control import router as agent_trade_router
 from .api import admin, auth, chat, factors, health, keys, mcp, notifications, signal_subscriptions, signals, subscription, tokens
-from .config import PUSHPLUS_ENABLED, SIGNAL_POLL_ENABLED, SYSTEM_NAME
+from .config import AGENT_TRADE_ENABLED, PUSHPLUS_ENABLED, SIGNAL_POLL_ENABLED, SYSTEM_NAME
 from .db import authenticate, create_session, init_db
 from .engine.poller import SignalPoller
 from .engine.subscription_pusher import SubscriptionPusher
+from .signal_notification_feed import SignalNotificationRecorder
 
 
 @asynccontextmanager
@@ -19,19 +22,24 @@ async def lifespan(app: FastAPI):
     init_db()
     poller_task = None
     pusher_task = None
+    agent_trade_task = None
+    notification_feed_task = None
     if SIGNAL_POLL_ENABLED:
         poller = SignalPoller()
         poller_task = asyncio.create_task(poller.run())
     if PUSHPLUS_ENABLED:
         pusher = SubscriptionPusher()
         pusher_task = asyncio.create_task(pusher.run())
+    if AGENT_TRADE_ENABLED:
+        agent_trade_task = asyncio.create_task(AgentTradeBridge().run())
+    notification_feed_task = asyncio.create_task(SignalNotificationRecorder().run())
     try:
         yield
     finally:
-        for task in (poller_task, pusher_task):
+        for task in (poller_task, pusher_task, agent_trade_task, notification_feed_task):
             if task is not None:
                 task.cancel()
-        for task in (poller_task, pusher_task):
+        for task in (poller_task, pusher_task, agent_trade_task, notification_feed_task):
             if task is not None:
                 try:
                     await task
@@ -63,6 +71,7 @@ app.include_router(signals.router)
 app.include_router(tokens.router)
 app.include_router(mcp.router)
 app.include_router(signal_subscriptions.router)
+app.include_router(agent_trade_router)
 app.include_router(chat.router)
 
 
@@ -122,6 +131,11 @@ async def subscription_page():
 @app.get("/notifications", include_in_schema=False)
 async def notifications_page():
     return FileResponse(_web_dir / "notifications.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/strategies", include_in_schema=False)
+async def strategies_page():
+    return FileResponse(_web_dir / "strategies.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/chat", include_in_schema=False)

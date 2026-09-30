@@ -165,7 +165,8 @@ CREATE TABLE IF NOT EXISTS signal_subscriptions (
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    baseline_at TEXT
+    baseline_at TEXT,
+    mode TEXT NOT NULL DEFAULT 'auto'
 );
 
 CREATE TABLE IF NOT EXISTS subscription_conditions (
@@ -174,9 +175,12 @@ CREATE TABLE IF NOT EXISTS subscription_conditions (
     factor_key TEXT NOT NULL,
     filters_json TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'primary',
+    condition_layer TEXT NOT NULL DEFAULT 'event',
     join_with TEXT,
     join_symbol TEXT,
     frequency_offset INTEGER NOT NULL DEFAULT 0,
+    frequency_offsets_json TEXT,
+    target_frequencies_json TEXT,
     side_rule TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0
 );
@@ -190,8 +194,26 @@ CREATE TABLE IF NOT EXISTS subscription_match_keys (
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     last_pushed_at TEXT,
+    sent_at TEXT,
+    baselined INTEGER NOT NULL DEFAULT 0,
+    is_present INTEGER NOT NULL DEFAULT 1,
+    last_absent_at TEXT,
+    episode_started_at TEXT,
     PRIMARY KEY (subscription_id, match_key)
 );
+
+CREATE TABLE IF NOT EXISTS subscription_signal_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscription_id INTEGER NOT NULL,
+    match_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    episode_started_at TEXT,
+    sent_at TEXT NOT NULL,
+    UNIQUE(subscription_id, match_key, episode_started_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscription_signal_log_sent_at
+    ON subscription_signal_log(subscription_id, sent_at DESC);
 
 CREATE TABLE IF NOT EXISTS user_push_channels (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -209,7 +231,8 @@ CREATE TABLE IF NOT EXISTS chat_history (
     owner_key TEXT NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    is_pending INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_history_owner_id
@@ -261,9 +284,39 @@ def init_db() -> None:
         conn.execute("ALTER TABLE users ADD COLUMN subscription_expires_at TEXT")
     if "shadow_mode" not in user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN shadow_mode INTEGER NOT NULL DEFAULT 0")
+    chat_cols = [r["name"] for r in conn.execute("PRAGMA table_info(chat_history)").fetchall()]
+    if "is_pending" not in chat_cols:
+        conn.execute("ALTER TABLE chat_history ADD COLUMN is_pending INTEGER NOT NULL DEFAULT 0")
     sub_cols = [r["name"] for r in conn.execute("PRAGMA table_info(signal_subscriptions)").fetchall()]
     if "baseline_at" not in sub_cols:
         conn.execute("ALTER TABLE signal_subscriptions ADD COLUMN baseline_at TEXT")
+    if "mode" not in sub_cols:
+        conn.execute("ALTER TABLE signal_subscriptions ADD COLUMN mode TEXT NOT NULL DEFAULT 'auto'")
+    match_cols = [r["name"] for r in conn.execute("PRAGMA table_info(subscription_match_keys)").fetchall()]
+    if "sent_at" not in match_cols:
+        conn.execute("ALTER TABLE subscription_match_keys ADD COLUMN sent_at TEXT")
+    if "baselined" not in match_cols:
+        conn.execute("ALTER TABLE subscription_match_keys ADD COLUMN baselined INTEGER NOT NULL DEFAULT 0")
+    if "is_present" not in match_cols:
+        conn.execute("ALTER TABLE subscription_match_keys ADD COLUMN is_present INTEGER NOT NULL DEFAULT 1")
+    if "last_absent_at" not in match_cols:
+        conn.execute("ALTER TABLE subscription_match_keys ADD COLUMN last_absent_at TEXT")
+    if "episode_started_at" not in match_cols:
+        conn.execute("ALTER TABLE subscription_match_keys ADD COLUMN episode_started_at TEXT")
+    # 旧去重行没有 sent/baseline 语义：已经 last_pushed 过的视为已处理（含首轮 baseline），
+    # sent_at 同时回填，保证新页面“今日已发”能读到老流水；不会触发重复推送。
+    conn.execute(
+        "UPDATE subscription_match_keys SET baselined = 1, sent_at = last_pushed_at"
+        " WHERE baselined = 0 AND sent_at IS NULL AND last_pushed_at IS NOT NULL"
+    )
+    cond_cols = [r["name"] for r in conn.execute("PRAGMA table_info(subscription_conditions)").fetchall()]
+    if "frequency_offsets_json" not in cond_cols:
+        conn.execute("ALTER TABLE subscription_conditions ADD COLUMN frequency_offsets_json TEXT")
+    if "target_frequencies_json" not in cond_cols:
+        conn.execute("ALTER TABLE subscription_conditions ADD COLUMN target_frequencies_json TEXT")
+    if "condition_layer" not in cond_cols:
+        conn.execute("ALTER TABLE subscription_conditions ADD COLUMN condition_layer TEXT NOT NULL DEFAULT 'event'")
+        conn.execute("UPDATE subscription_conditions SET condition_layer = 'pool' WHERE role = 'context'")
     key_cols = [r["name"] for r in conn.execute("PRAGMA table_info(user_keys)").fetchall()]
     if "token_encrypted" not in key_cols:
         conn.execute("ALTER TABLE user_keys ADD COLUMN token_encrypted TEXT")

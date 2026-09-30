@@ -4,7 +4,7 @@
 后续要控制成本时，在 config 层加：模型分级、月预算、每日上限、缓存。
 """
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import httpx
 
@@ -18,10 +18,19 @@ class LLMError(RuntimeError):
 async def chat_once(
     messages: List[Dict[str, Any]],
     tools: Optional[List[Dict[str, Any]]] = None,
+    on_text: Optional[Callable[[str], Awaitable[None]]] = None,
 ) -> Dict[str, Any]:
-    """调用一次 chat.completions，返回 content / tool_calls / usage。"""
+    """调用一次 chat.completions，返回 content / tool_calls / usage。
+
+    on_text 在每个流式文本增量到达时调用，用于把未完成的回答增量落库，
+    页面中途关闭后也能恢复。
+    """
     if LLM_MOCK:
-        return _mock_once(messages, tools)
+        result = _mock_once(messages, tools)
+        if on_text and result.get("chunks"):
+            for chunk in result["chunks"]:
+                await on_text(chunk)
+        return result
 
     if not LLM_API_KEY:
         raise LLMError("未配置 LLM_API_KEY；本地联调可先设 LLM_MOCK=1")
@@ -70,6 +79,8 @@ async def chat_once(
                 text = delta.get("content")
                 if text:
                     content_parts.append(text)
+                    if on_text:
+                        await on_text(text)
                 for tc in delta.get("tool_calls") or []:
                     idx = tc.get("index", 0)
                     slot = tool_parts.setdefault(
@@ -153,7 +164,14 @@ def _mock_once(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, An
                 filters = {"frequencies": ["15m", "1h"]}
                 filter_raw = "{\"factorKey\": \"%s\", \"filters\": {\"frequencies\": [\"15m\", \"1h\"]}}" % factor_key
             else:
-                freq = "15m" if ("15分钟" in last_user or "15 分钟" in last_user) else ("5m" if ("5分钟" in last_user or "5 分钟" in last_user) else "1h")
+                if "30分钟" in last_user or "30 分钟" in last_user:
+                    freq = "30m"
+                elif "15分钟" in last_user or "15 分钟" in last_user:
+                    freq = "15m"
+                elif "5分钟" in last_user or "5 分钟" in last_user:
+                    freq = "5m"
+                else:
+                    freq = "1h"
                 filters = {"frequencies": [freq]}
                 filter_raw = "{\"factorKey\": \"%s\", \"filters\": {\"frequencies\": [\"%s\"]}}" % (factor_key, freq)
             tool_calls.append(

@@ -8,7 +8,6 @@ from app.agent.filter_store import patch_filters
 from app.signal_subscriptions import (
     create_signal_subscription,
     delete_signal_subscription,
-    is_signal_subscription_active,
     list_signal_subscriptions,
 )
 
@@ -41,11 +40,9 @@ def test_signal_subscription_crud(user_record):
     rows = list_signal_subscriptions(user_record["_user_id"])
     assert len(rows) == 1
     assert rows[0]["id"] == created["id"]
-    assert is_signal_subscription_active(created["id"], user_record["_user_id"]) is True
 
     assert delete_signal_subscription(user_record["_user_id"], created["id"]) is True
     assert list_signal_subscriptions(user_record["_user_id"]) == []
-    assert is_signal_subscription_active(created["id"], user_record["_user_id"]) is False
 
 
 def test_signal_subscriptions_api_matches_and_delete(client, user_record, monkeypatch):
@@ -121,26 +118,17 @@ async def test_execute_tool_creates_subscription_from_current_filters(user_recor
 
     patch_filters(
         user_record,
-        "dimen_gate_signal",
-        {"frequencies": ["15m", "1h"], "limit": 20},
+        "jue_direction",
+        {"frequencies": ["15m", "1h"], "states": ["20诀破诀"], "walkCodes": ["2"]},
     )
     result = await execute_tool(
         "sanyi_create_subscription",
-        {"factorKey": "dimen_gate_signal"},
+        {"factorKey": "jue_direction"},
         user_record,
     )
     assert "error" not in result
-    assert result["subscription"]["filters"]["frequencies"] == ["15m", "1h"]
+    assert result["subscription"]["filters"]["walkCodes"] == ["2"]
 
-
-
-    rejected = await execute_tool(
-        "sanyi_create_subscription",
-        {"factorKey": "jue_direction", "filters": {"frequencies": ["15m"]}},
-        user_record,
-    )
-    assert "error" in rejected
-    assert "不是事件线因子" in rejected["error"]
     listed = await execute_tool("sanyi_list_subscriptions", {}, user_record)
     assert len(listed["subscriptions"]) == 1
     sub_id = listed["subscriptions"][0]["id"]

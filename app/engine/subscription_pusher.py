@@ -21,6 +21,8 @@ from ..signal_subscriptions import (
     list_all_active_signal_subscriptions,
     set_subscription_baseline,
 )
+from ..strategy_model import MODE_POOL, MODE_TRIGGER
+from ..subscription_history import record_sent_signal
 
 
 def _actor_for_user(user_id: int) -> Dict[str, Any]:
@@ -52,38 +54,95 @@ def _match_key(factor_key: str, match: Dict[str, Any]) -> str:
 
 
 def record_match(subscription_id: int, match_key: str, now: str) -> bool:
-    """记录/续期一个匹配。返回 True 表示本次应该推送（新出现或上次推送失败）。"""
+    """记录/续期一个匹配。
+
+    这里维护“入场/在场/离场”状态机：
+    - 新 key 或上一轮已离场的 key 重新出现 -> 新 episode，返回 True（要推送）；
+    - 连续在场：只续期，不重复推送；
+    - 上一轮推送失败且 baselined=0：返回 True，下一轮重试；
+    - baseline 首轮标记过的存量信号：不推。
+    """
     conn = get_conn()
-    try:
+    row = conn.execute(
+        "SELECT is_present, baselined, sent_at FROM subscription_match_keys"
+        " WHERE subscription_id = ? AND match_key = ?",
+        (subscription_id, match_key),
+    ).fetchone()
+    if row is None:
         conn.execute(
-            "INSERT INTO subscription_match_keys(subscription_id, match_key, first_seen_at, last_seen_at)"
-            " VALUES (?, ?, ?, ?)",
-            (subscription_id, match_key, now, now),
+            "INSERT INTO subscription_match_keys("
+            "subscription_id, match_key, first_seen_at, last_seen_at,"
+            "last_pushed_at, sent_at, baselined, is_present, last_absent_at, episode_started_at)"
+            " VALUES (?, ?, ?, ?, NULL, NULL, 0, 1, NULL, ?)",
+            (subscription_id, match_key, now, now, now),
         )
         conn.commit()
         return True
-    except Exception:
-        # 已存在：续期，并沿用 last_pushed_at 判断是否需要重试。
+
+    was_present = bool(row["is_present"])
+    pending_retry = (not bool(row["baselined"])) and not row["sent_at"]
+    if was_present:
         conn.execute(
-            "UPDATE subscription_match_keys SET last_seen_at = ?"
+            "UPDATE subscription_match_keys SET last_seen_at = ?, is_present = 1"
             " WHERE subscription_id = ? AND match_key = ?",
             (now, subscription_id, match_key),
         )
-        conn.commit()
-        row = conn.execute(
-            "SELECT last_pushed_at FROM subscription_match_keys"
+    else:
+        # 离场后再次入场：视为全新 episode，清除上一次推送状态。
+        conn.execute(
+            "UPDATE subscription_match_keys SET last_seen_at = ?, is_present = 1,"
+            " last_absent_at = NULL, episode_started_at = ?, last_pushed_at = NULL,"
+            " sent_at = NULL, baselined = 0"
             " WHERE subscription_id = ? AND match_key = ?",
-            (subscription_id, match_key),
-        ).fetchone()
-        return row is None or row["last_pushed_at"] is None
+            (now, now, subscription_id, match_key),
+        )
+    conn.commit()
+    return (not was_present) or pending_retry
+
+
+def mark_baselined(subscription_id: int, match_keys: List[str], now: str) -> None:
+    """首轮 baseline：存量信号只记录、不实际推送。"""
+    if not match_keys:
+        return
+    conn = get_conn()
+    conn.executemany(
+        "UPDATE subscription_match_keys SET is_present = 1, last_pushed_at = ?,"
+        " sent_at = NULL, baselined = 1 WHERE subscription_id = ? AND match_key = ?",
+        [(now, subscription_id, key) for key in match_keys],
+    )
+    conn.commit()
 
 
 def mark_pushed(subscription_id: int, match_keys: List[str], now: str) -> None:
+    """Pushplus 实际发送成功后标记。sent_at 用于“今日已发”。"""
+    if not match_keys:
+        return
     conn = get_conn()
     conn.executemany(
-        "UPDATE subscription_match_keys SET last_pushed_at = ?"
+        "UPDATE subscription_match_keys SET last_pushed_at = ?, sent_at = ?,"
+        " baselined = 0, is_present = 1"
         " WHERE subscription_id = ? AND match_key = ?",
-        [(now, subscription_id, key) for key in match_keys],
+        [(now, now, subscription_id, key) for key in match_keys],
+    )
+    conn.commit()
+
+
+def close_absent_matches(subscription_id: int, present_keys: List[str], now: str) -> None:
+    """把本轮不再命中的 key 标记为离场；下次再出现会按新 episode 重新推送。"""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT match_key FROM subscription_match_keys"
+        " WHERE subscription_id = ? AND is_present = 1",
+        (subscription_id,),
+    ).fetchall()
+    present = set(present_keys)
+    absent = [row["match_key"] for row in rows if row["match_key"] not in present]
+    if not absent:
+        return
+    conn.executemany(
+        "UPDATE subscription_match_keys SET is_present = 0, last_absent_at = ?"
+        " WHERE subscription_id = ? AND match_key = ?",
+        [(now, subscription_id, key) for key in absent],
     )
     conn.commit()
 
@@ -101,34 +160,83 @@ def _beijing_time(value: Any) -> str:
         return str(value).replace("T", " ")[:16]
 
 
-def _match_epoch(match: Dict[str, Any]) -> float:
+def _short_format_timezone(match: Dict[str, Any], factor_key: str = "") -> Any:
+    """MM/DD HH:MM 短格式的时区口径。
+
+    - crypto_*：东京引擎产生的短时间是无时区 UTC（与完整时间戳口径一致）；
+    - 其它（qh 期货门旧口径）：北京时间。
+    """
+    key = str(factor_key or match.get("factorKey") or "")
+    if key.startswith("crypto_"):
+        return timezone.utc
+    return ZoneInfo("Asia/Shanghai")
+
+
+def _match_epoch(match: Dict[str, Any], factor_key: str = "") -> float:
     """取信号时间 epoch；没有时间返回 0。"""
+    short_tz = _short_format_timezone(match, factor_key)
+
+    def _event_field_epoch(value: Any) -> float:
+        text = str(value or "").strip()
+        if not text:
+            return 0.0
+        # 完整时间戳（YYYY-MM-DD[ HH:MM[:SS]] / ISO）：naive 值按 UTC 解析。
+        # v4 因子的 openAt/closeAt/generatedAt 都是东京引擎生成的 UTC naive 时间。
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+        except ValueError:
+            pass
+        # MM/DD HH:MM 短格式：crypto 按 UTC，qh 期货旧口径按北京时间。
+        try:
+            dt = datetime.strptime(text[:11].strip(), "%m/%d %H:%M")
+            dt = dt.replace(year=datetime.now(short_tz).year, tzinfo=short_tz)
+            return dt.timestamp()
+        except Exception:
+            return 0.0
+
     for key in ("eventAt", "openAt", "closeAt", "generatedAt", "updatedAt", "barTime"):
         value = match.get(key)
         if not value:
             continue
+        epoch = _event_field_epoch(value)
+        if epoch:
+            return epoch
+
+    def _full_datetime_epoch(value: Any) -> float:
+        """v4 门信号时间是完整 UTC 时间戳（YYYY-MM-DD HH:MM[:SS]）。"""
+        text = str(value or "").strip()
+        if not text:
+            return 0.0
         try:
-            dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
-            return dt.timestamp()
-        except Exception:
-            continue
-    # 门信号没有 openAt 时，用 cross/t2/t1 结构时间兜底（qh 侧为北京时间）。
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return 0.0
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+
+    # 门信号没有 openAt 时，用 cross/t2/t1 结构时间兜底：
+    # 完整日期时间按 UTC 解析；MM/DD HH:MM 短格式按因子域区分时区。
     for key in ("crossTime", "t2Time", "t1Time"):
         value = match.get(key)
         if not value:
             continue
+        epoch = _full_datetime_epoch(value)
+        if epoch:
+            return epoch
         try:
             dt = datetime.strptime(str(value)[:11].strip(), "%m/%d %H:%M")
-            dt = dt.replace(year=datetime.now().year, tzinfo=ZoneInfo("Asia/Shanghai"))
+            dt = dt.replace(year=datetime.now(short_tz).year, tzinfo=short_tz)
             return dt.timestamp()
         except Exception:
             continue
     return 0.0
 
 
-def _is_stale_baseline_match(match: Dict[str, Any], baseline_at: Any) -> bool:
+def _is_stale_baseline_match(match: Dict[str, Any], baseline_at: Any, factor_key: str = "") -> bool:
     """对门池类信号，baseline 之后才被 limit 扩出来的老门不补推。
 
     没有时间字段的历史门按老门处理；有 openAt/closeAt 且晚于 baseline 的新门照常推。
@@ -140,12 +248,17 @@ def _is_stale_baseline_match(match: Dict[str, Any], baseline_at: Any) -> bool:
         base_epoch = base_dt.timestamp()
     except Exception:
         return False
-    epoch = _match_epoch(match)
+    epoch = _match_epoch(match, factor_key)
     return epoch <= 0 or epoch < base_epoch
 
 
 def _match_line(match: Dict[str, Any]) -> str:
-    label = match.get("contract") or match.get("name") or match.get("symbol") or "未知标的"
+    name = match.get("name") or match.get("symbol")
+    contract = match.get("contract")
+    if contract and name and str(contract) not in str(name):
+        label = "%s %s" % (name, contract)
+    else:
+        label = contract or name or "未知标的"
     freq = match.get("frequency")
     state = match.get("state") or match.get("status")
     gate_type = match.get("gateType")
@@ -182,6 +295,11 @@ def _match_line(match: Dict[str, Any]) -> str:
         parts.append(str(freq))
     if state:
         parts.append(str(state))
+    if match.get("suggestedLeverage") is not None:
+        if match.get("leverageFallback"):
+            parts.append("建议杠杆 %sx（保守）" % match["suggestedLeverage"])
+        else:
+            parts.append("建议杠杆 %sx" % match["suggestedLeverage"])
     if match.get("gateType") in ("tian", "di") and not state_mapped:
         parts.append("天门" if match.get("gateType") == "tian" else "地门")
     if match.get("liveStatus"):
@@ -210,13 +328,16 @@ def _match_line(match: Dict[str, Any]) -> str:
                 parts.append("门价高于MA208 %s%%" % distance)
             else:
                 parts.append("门价低于MA208 %s%%" % abs(distance))
-    if match.get("suggestedLeverage") is not None:
-        parts.append("建议杠杆 %sx" % match["suggestedLeverage"])
     if match.get("volatilityPct") is not None:
         parts.append("波动率 %s%%" % match["volatilityPct"])
     for context in match.get("contexts") or []:
         if not isinstance(context, dict):
             continue
+        if str(context.get("factorKey") or "").endswith("_ma"):
+            for ma_hit in context.get("matches") or []:
+                if isinstance(ma_hit, dict) and ma_hit.get("maRelationMissing"):
+                    parts.append("父级MA832不足·趋势未确认")
+                    break
         for gate in context.get("matches") or []:
             if not isinstance(gate, dict):
                 continue
@@ -244,7 +365,7 @@ def _build_push(title_prefix: str, sub: Dict[str, Any], match: Dict[str, Any]) -
         sub.get("name") or sub.get("factorKey"),
         short,
     )
-    return title[:100], "- " + line
+    return title[:100], "- " + line + "\n手机托管：https://bq.shhghf.com/m/position"
 
 
 def _build_batch_push(title_prefix: str, entries: List[Dict[str, Any]]) -> Tuple[str, str]:
@@ -263,13 +384,13 @@ def _build_batch_push(title_prefix: str, entries: List[Dict[str, Any]]) -> Tuple
             first_short = line.split("（", 1)[0]
 
     title = "%s%d 条新信号 · %s" % (title_prefix, len(entries), first_short)
-    return title[:100], "\n".join(lines)
+    return title[:100], "\n".join(lines) + "\n手机托管：https://bq.shhghf.com/m/position"
 
 
-async def send_pushplus_checked(title: str, content: str, token: str) -> Tuple[bool, int]:
+async def send_pushplus_checked(title: str, content: str, token: str) -> Tuple[bool, int, str]:
     token = (token or "").strip()
     if not token:
-        return False, 0
+        return False, 0, ""
     payload = {
         "token": token,
         "title": title[:100],
@@ -281,13 +402,14 @@ async def send_pushplus_checked(title: str, content: str, token: str) -> Tuple[b
             response = await client.post(PUSHPLUS_URL, json=payload)
             body = response.json()
     except Exception:
-        return False, 0
+        return False, 0, ""
     code = int(body.get("code") or 0)
-    return response.status_code == 200 and code == 200, code
+    message_id = str(body.get("data") or "")
+    return response.status_code == 200 and code == 200, code, message_id
 
 
 async def send_pushplus(title: str, content: str, token: str) -> bool:
-    ok, _code = await send_pushplus_checked(title, content, token)
+    ok, _code, _message_id = await send_pushplus_checked(title, content, token)
     return ok
 
 
@@ -310,6 +432,14 @@ class SubscriptionPusher:
                     actor=_actor_for_user(user_id),
                     sub=sub,
                 )
+                # 数据源暂不可用/因子池重建中：本轮不建 baseline、不推，
+                # 下一轮自动重试，避免把“空数据”当成合法首轮基线。
+                if item.get("error") or item.get("conditionErrors"):
+                    print(
+                        "subscription_pusher defer sub=%s user=%s error=%s conditions=%s"
+                        % (sub_id, user_id, item.get("error"), item.get("conditionErrors"))
+                    )
+                    continue
                 # 评估期间用户可能刚取消订阅；推送前实时复核，避免取消后仍推。
                 if not is_signal_subscription_active(sub_id, user_id):
                     print(
@@ -317,28 +447,49 @@ class SubscriptionPusher:
                         % (sub_id, user_id)
                     )
                     continue
-                matches = item.get("matches") or []
+
+                mode = item.get("mode")
+                if mode == MODE_TRIGGER and not item.get("structureComplete"):
+                    print(
+                        "subscription_pusher incomplete sub=%s user=%s missing=%s"
+                        % (sub_id, user_id, item.get("missingParts"))
+                    )
+                    continue
+                if mode == MODE_POOL:
+                    pushable_matches = item.get("pool") or []
+                elif mode == MODE_TRIGGER:
+                    pushable_matches = item.get("signals") or item.get("matches") or []
+                else:
+                    # auto 已由评估器解析，正常不会走到这里；防御性退回旧 matches。
+                    pushable_matches = item.get("matches") or []
+
                 if not sub.get("baselineAt"):
-                    # 首轮只建 baseline：把订阅时已经存在的信号记为“已推送”，不实际发。
+                    # 首轮只建 baseline：把订阅时已经存在的池子/信号记为已处理，不实际发。
                     baseline_keys: List[str] = []
-                    for match in matches:
+                    for match in pushable_matches:
                         if not isinstance(match, dict):
                             continue
                         key = _match_key(sub["factorKey"], match)
                         record_match(sub["id"], key, now)
                         baseline_keys.append(key)
-                    if baseline_keys:
-                        mark_pushed(sub["id"], baseline_keys, now)
+                    mark_baselined(sub["id"], baseline_keys, now)
+                    close_absent_matches(sub["id"], baseline_keys, now)
                     set_subscription_baseline(sub["id"], now)
                     continue
 
                 pending: List[Dict[str, Any]] = []
                 stale_keys: List[str] = []
-                for match in matches:
+                current_keys: List[str] = []
+                for match in pushable_matches:
                     if not isinstance(match, dict):
                         continue
                     key = _match_key(sub["factorKey"], match)
-                    if _is_stale_baseline_match(match, sub.get("baselineAt")):
+                    current_keys.append(key)
+                    if _is_stale_baseline_match(
+                        match,
+                        sub.get("baselineAt"),
+                        str(sub.get("factorKey") or ""),
+                    ):
                         # baseline 之后因 limit 扩大才进入视野的老门：记录但不推送。
                         record_match(sub["id"], key, now)
                         stale_keys.append(key)
@@ -346,7 +497,9 @@ class SubscriptionPusher:
                     if record_match(sub["id"], key, now):
                         pending.append({"sub": sub, "match": match, "key": key})
                 if stale_keys:
-                    mark_pushed(sub["id"], stale_keys, now)
+                    mark_baselined(sub["id"], stale_keys, now)
+                # 本轮不再命中的 key 标记离场：池型出池自动移除，触发型下次同样动作算新信号。
+                close_absent_matches(sub["id"], current_keys, now)
                 if not pending:
                     continue
                 bucket = pending_by_user.setdefault(
@@ -380,19 +533,34 @@ class SubscriptionPusher:
                 continue
 
             title, content = _build_batch_push(self.title_prefix, entries)
-            ok, code = await send_pushplus_checked(
+            ok, code, message_id = await send_pushplus_checked(
                 title,
                 content,
                 token=str(bucket["token"] or ""),
             )
             if ok:
+                for entry in entries:
+                    record_sent_signal(
+                        int(entry["sub"]["id"]),
+                        entry["key"],
+                        entry["match"],
+                        now,
+                    )
                 keys_by_sub: Dict[int, List[str]] = {}
                 for entry in entries:
                     keys_by_sub.setdefault(int(entry["sub"]["id"]), []).append(entry["key"])
                 for sub_id, keys in keys_by_sub.items():
                     mark_pushed(sub_id, keys, now)
                 sent += 1
+                print(
+                    "subscription_pusher PUSH_SENT user=%s title=%r entries=%d pushplus_id=%s"
+                    % (user_id, title, len(entries), message_id)
+                )
                 continue
+            print(
+                "subscription_pusher PUSH_FAIL user=%s code=%s title=%r entries=%d"
+                % (user_id, code, title, len(entries))
+            )
             if code in (900, 903):
                 # 900=日请求次数超限；903=token 无效。停止重试 1 小时，避免继续冲击通道。
                 _PUSHPLUS_BLOCKED_UNTIL[user_id] = (

@@ -31,6 +31,15 @@ FILTER_KEYS = (
     "eventTypes",
     "actions",
     "maxAgeMinutes",
+    "relations",
+    "relationStates",
+    "relationCrosses",
+    "requireAllRelations",
+    "tolerancePct",
+    "priceZones",
+    "maOrders",
+    "alignments",
+    "signatures",
     "limit",
 )
 

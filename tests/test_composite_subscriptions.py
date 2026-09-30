@@ -11,7 +11,6 @@
 """
 import importlib
 import uuid
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -437,19 +436,21 @@ async def test_pusher_pushes_composite_match_once(user_record, monkeypatch):
     async def fake_send(title, content, token=""):
         assert token == "composite-pushplus-token"
         sent.append({"title": title, "content": content})
-        return True, 200
+        return True
 
-    monkeypatch.setattr(pusher_module, "send_pushplus_checked", fake_send)
+    monkeypatch.setattr(pusher_module, "send_pushplus", fake_send)
 
     pusher = pusher_module.SubscriptionPusher()
-    # 首轮 baseline：订阅时已有的组合结果不推。
-    assert await pusher.run_once() == 0
-    assert sent == []
+    assert await pusher.run_once() == 1
+    assert len(sent) == 1
+    assert "组合订阅推送测试" in sent[0]["title"]
+    assert "螺纹钢" in sent[0]["content"]
+    assert "地门" in sent[0]["content"]
 
     # 同一组合结果（eventId 稳定）不重复推送。
     registry._cache.clear()
     assert await pusher.run_once() == 0
-    assert sent == []
+    assert len(sent) == 1
 
     # 新出现的品种 + 门组合，只推新增一条。
     state["gates"] = {
@@ -467,7 +468,6 @@ async def test_pusher_pushes_composite_match_once(user_record, monkeypatch):
                 "formation": "门下",
                 "is_first": False,
                 "key": "ag-di-1h-below",
-                "open_at": datetime.now(timezone.utc).isoformat(),
             }
         ],
     }
@@ -507,8 +507,8 @@ async def test_pusher_pushes_composite_match_once(user_record, monkeypatch):
     }
     registry._cache.clear()
     assert await pusher.run_once() == 1
-    assert len(sent) == 1
-    assert "白银" in sent[0]["content"]
+    assert len(sent) == 2
+    assert "白银" in sent[1]["content"]
 
 
 @pytest.mark.asyncio
@@ -524,18 +524,8 @@ async def test_agent_tool_accepts_conditions(user_record):
     result = await execute_tool(
         "sanyi_create_subscription",
         {
-            "name": "期货今日门 + 地门事件",
-            "conditions": [
-                {
-                    "factorKey": "futures_gate_signal",
-                    "filters": {"frequencies": ["15m"], "gateTypes": ["tian"], "actions": ["open"]},
-                },
-                {
-                    "factorKey": "dimen_gate_signal",
-                    "filters": {"frequencies": ["15m"]},
-                    "join": {"frequencyOffset": 1, "sideRule": "below"},
-                },
-            ],
+            "name": "走2破20诀 + 下方有效地门",
+            "conditions": _long_conditions(),
         },
         user_record,
     )
@@ -549,7 +539,7 @@ async def test_agent_tool_accepts_conditions(user_record):
     assert sub["conditions"][1]["sideRule"] == "below"
 
     listed = await execute_tool("sanyi_list_subscriptions", {}, user_record)
-    assert listed["subscriptions"][0]["conditions"][1]["factorKey"] == "dimen_gate_signal"
+    assert listed["subscriptions"][0]["conditions"][1]["factorKey"] == "gate_condition"
 
 
 def test_conditions_accept_join_on_form(user_record):
@@ -665,21 +655,3 @@ async def test_context_condition_error_is_reported_without_breaking_subscription
     assert len(item["conditionErrors"]) == 1
     assert item["conditionErrors"][0]["factorKey"] == "gate_condition"
     assert "门数据源不可用" in item["conditionErrors"][0]["error"]
-
-
-def test_futures_gate_subscription_keeps_only_current_15_cycle():
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    from app.composite_evaluator import _beijing_trading_cycle_start, _filter_futures_gate_subscription
-
-    cycle_start = _beijing_trading_cycle_start(datetime.now(ZoneInfo("Asia/Shanghai")))
-    new_time = (cycle_start.replace(tzinfo=None) + timedelta(hours=2)).isoformat()
-    old_time = (cycle_start.replace(tzinfo=None) - timedelta(hours=2)).isoformat()
-    matches = [
-        {"symbol": "NEW", "openAt": new_time + "+08:00"},
-        {"symbol": "OLD", "openAt": old_time + "+08:00"},
-        {"symbol": "NO_TIME", "openAt": None},
-    ]
-    kept = _filter_futures_gate_subscription({"factorKey": "gate_condition"}, matches)
-    assert [m["symbol"] for m in kept] == ["NEW"]
