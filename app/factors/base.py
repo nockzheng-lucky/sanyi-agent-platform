@@ -43,6 +43,7 @@ class FactorSpec:
     tags: List[str] = field(default_factory=list)
     shadow_only: bool = False
     domain: str = "futures"
+    event_based: bool = True
 
     def descriptor(self) -> Dict[str, Any]:
         return {
@@ -58,6 +59,7 @@ class FactorSpec:
             "tags": list(self.tags),
             "shadowOnly": self.shadow_only,
             "domain": self.domain,
+            "eventBased": self.event_based,
         }
 
 

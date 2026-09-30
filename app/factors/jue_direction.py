@@ -414,4 +414,5 @@ jue_direction = FactorSpec(
     ),
     handler=_evaluate,
     tags=["jue", "direction", "long", "short", "broken", "market"],
+    event_based=False,
 )

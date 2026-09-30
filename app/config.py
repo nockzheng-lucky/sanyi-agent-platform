@@ -109,13 +109,43 @@ GATE_API_URL = os.getenv(
 ).strip()
 GATE_API_TIMEOUT_SECONDS = _int("SANYI_GATE_API_TIMEOUT_SECONDS", 10)
 
+# 币圈门条件因子（影子模式专用）：东京币圈服务器只读门池。
+# 注意：币圈公共端只保证 view=fresh 有数据，view=all 目前为空。
+CRYPTO_GATE_API_URL = os.getenv(
+    "SANYI_CRYPTO_GATE_API_URL",
+    "https://167.179.69.189/api/gates?view=fresh",
+).strip()
+CRYPTO_GATE_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_GATE_TIMEOUT_SECONDS", 30)
+CRYPTO_GATE_CONNECT_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_GATE_CONNECT_TIMEOUT_SECONDS", 15)
+
+# 币圈今日开门事件（影子模式专用）：与期货“今日门信号”对齐，只读事件流，不读历史门池。
+# scope=today 与币圈热力图“今日门信号”使用同一条东京侧 sidebar pipeline。
+CRYPTO_EVENTS_API_URL = os.getenv(
+    "SANYI_CRYPTO_EVENTS_API_URL",
+    "https://167.179.69.189/api/events?scope=today",
+).strip()
+CRYPTO_EVENTS_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_EVENTS_TIMEOUT_SECONDS", 30)
+CRYPTO_EVENTS_CONNECT_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_EVENTS_CONNECT_TIMEOUT_SECONDS", 25)
+
 # 币圈诀与破诀因子（影子模式专用）：东京币圈服务器 sanyi-bybit-tokyo-01。
 CRYPTO_JUE_URL = os.getenv(
     "SANYI_CRYPTO_JUE_DIRECTION_URL",
     "https://167.179.69.189/api/market/jue-direction",
 ).strip().rstrip("/")
 CRYPTO_VERIFY_SSL = _bool("SANYI_CRYPTO_VERIFY_SSL", False)  # 该服务器证书不匹配 IP，暂用 IP 直连
-CRYPTO_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_TIMEOUT_SECONDS", 10)
+CRYPTO_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_TIMEOUT_SECONDS", 30)
+CRYPTO_CONNECT_TIMEOUT_SECONDS = _int("SANYI_CRYPTO_CONNECT_TIMEOUT_SECONDS", 15)
+
+# 币圈建议杠杆：以 ETH 的杠杆为锚，按波动率反比换算。
+CRYPTO_VOLATILITY_API_URL = os.getenv(
+    "SANYI_CRYPTO_VOLATILITY_API_URL",
+    "https://167.179.69.189/api/market/volatility",
+).strip()
+CRYPTO_LEVERAGE_ANCHOR_SYMBOL = os.getenv("SANYI_CRYPTO_LEVERAGE_ANCHOR_SYMBOL", "ETHUSDT")
+CRYPTO_LEVERAGE_ANCHOR_LEVERAGE = _int("SANYI_CRYPTO_LEVERAGE_ANCHOR_LEVERAGE", 50)
+CRYPTO_LEVERAGE_MIN = _int("SANYI_CRYPTO_LEVERAGE_MIN", 10)
+CRYPTO_LEVERAGE_MAX = _int("SANYI_CRYPTO_LEVERAGE_MAX", 50)
+CRYPTO_LEVERAGE_CACHE_SECONDS = _int("SANYI_CRYPTO_LEVERAGE_CACHE_SECONDS", 1800)
 
 # Pushplus 推送：token 是用户级配置（user_push_channels 表），不使用全局 token。
 PUSHPLUS_ENABLED = _bool("SANYI_PUSHPLUS_ENABLED", True)

@@ -164,8 +164,25 @@ CREATE TABLE IF NOT EXISTS signal_subscriptions (
     name TEXT,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    baseline_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS subscription_conditions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscription_id INTEGER NOT NULL,
+    factor_key TEXT NOT NULL,
+    filters_json TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'primary',
+    join_with TEXT,
+    join_symbol TEXT,
+    frequency_offset INTEGER NOT NULL DEFAULT 0,
+    side_rule TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscription_conditions_subscription_id
+    ON subscription_conditions(subscription_id);
 
 CREATE TABLE IF NOT EXISTS subscription_match_keys (
     subscription_id INTEGER NOT NULL,
@@ -244,9 +261,23 @@ def init_db() -> None:
         conn.execute("ALTER TABLE users ADD COLUMN subscription_expires_at TEXT")
     if "shadow_mode" not in user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN shadow_mode INTEGER NOT NULL DEFAULT 0")
+    sub_cols = [r["name"] for r in conn.execute("PRAGMA table_info(signal_subscriptions)").fetchall()]
+    if "baseline_at" not in sub_cols:
+        conn.execute("ALTER TABLE signal_subscriptions ADD COLUMN baseline_at TEXT")
     key_cols = [r["name"] for r in conn.execute("PRAGMA table_info(user_keys)").fetchall()]
     if "token_encrypted" not in key_cols:
         conn.execute("ALTER TABLE user_keys ADD COLUMN token_encrypted TEXT")
+    # 组合订阅条件层：旧单因子订阅没有子表记录，补一条 primary 条件，统一读取路径。
+    conn.execute(
+        "INSERT INTO subscription_conditions("
+        "subscription_id, factor_key, filters_json, role, join_with, join_symbol,"
+        "frequency_offset, side_rule, sort_order)"
+        " SELECT s.id, s.factor_key, s.filters_json, 'primary', NULL, 'symbol', 0, NULL, 0"
+        " FROM signal_subscriptions s"
+        " WHERE NOT EXISTS ("
+        "   SELECT 1 FROM subscription_conditions c WHERE c.subscription_id = s.id"
+        " )"
+    )
     conn.commit()
 
 

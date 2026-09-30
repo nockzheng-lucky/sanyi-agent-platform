@@ -21,6 +21,19 @@ const sendBtn = document.getElementById("sendBtn");
 let history = [];
 let streaming = false;
 let subscriptionStream = null;
+let shadowMode = false;
+let collapsedSubscriptionGroups = new Set();
+
+async function refreshShadowMode() {
+  try {
+    const resp = await fetch("/api/v1/auth/me", { credentials: "same-origin" });
+    if (!resp.ok) return;
+    const body = await resp.json();
+    shadowMode = !!(body && body.code === 0 && body.data && body.data.shadowMode);
+  } catch (_e) {
+    shadowMode = false;
+  }
+}
 
 async function loadChatHistory(actor) {
   history = [];
@@ -46,7 +59,7 @@ function showLogin() {
   accountEl.textContent = "";
 }
 
-function showChat(actor) {
+async function showChat(actor) {
   loginCard.classList.add("hidden");
   chatCard.classList.remove("hidden");
   if (needKeyBanner) needKeyBanner.classList.toggle("hidden", !actor.needsKey);
@@ -55,6 +68,8 @@ function showChat(actor) {
   } else if (actor.token) {
     accountEl.textContent = `令牌：${actor.token.name} · 已用 ${actor.token.quotaUsed} / ${actor.token.quotaTotal === -1 ? "不限" : actor.token.quotaTotal}`;
   }
+  shadowMode = false;
+  await refreshShadowMode();
   loadChatHistory(actor);
   renderLoadedFactors();
   loadSubscriptions();
@@ -161,11 +176,24 @@ function firstDefined(...values) {
 
 const FACTOR_LABELS = {
   dimen_gate_signal: "地门信号",
+  futures_gate_signal: "期货今日门信号",
   jue_direction: "诀与破诀",
   gate_condition: "门条件",
   wave_jue_combo: "走法×破诀组合",
   crypto_market: "币圈行情",
+  crypto_gate_condition: "币圈门条件",
+  crypto_gate_signal: "币圈今日门信号",
+  crypto_wave_jue_combo: "币圈走法×破诀组合",
 };
+
+const SUBSCRIPTION_GROUPS = [
+  { key: "futures", label: "期货侧", empty: "暂无期货订阅。" },
+  { key: "crypto", label: "币圈侧", empty: "暂无币圈订阅。" },
+];
+
+function subscriptionDomain(factorKey) {
+  return String(factorKey || "").startsWith("crypto_") ? "crypto" : "futures";
+}
 
 const FREQUENCY_LABELS = {
   "5m": "5分钟",
@@ -208,16 +236,45 @@ function directionLabel(value) {
   return DIRECTION_LABELS[value] || value;
 }
 
-function signalStatusLabel(value) {
+function signalStatusLabel(value, gateType) {
+  if (gateType === "tian") {
+    if (value === "OPEN") return "天门开";
+    if (value === "CLOSED") return "天门关";
+    if (value === "FORMATION_ABOVE") return "天门形成·无动作门上";
+    if (value === "FORMATION_BELOW") return "天门形成·无动作门下";
+  }
+  if (gateType === "di") {
+    if (value === "OPEN") return "地门开";
+    if (value === "CLOSED") return "地门关";
+    if (value === "FORMATION_ABOVE") return "地门形成·无动作门上";
+    if (value === "FORMATION_BELOW") return "地门形成·无动作门下";
+  }
   return GATE_STATUS_LABELS[value] || value;
 }
 
-function subscriptionFiltersText(filters) {
+const GATE_TYPE_LABELS = {
+  tian: "天门",
+  di: "地门",
+};
+
+function gateTypeLabel(value) {
+  return GATE_TYPE_LABELS[value] || value;
+}
+
+function filterPartsText(filters) {
   const parts = [];
   const value = filters || {};
 
   if (Array.isArray(value.frequencies) && value.frequencies.length) {
     parts.push(value.frequencies.map(frequencyLabel).join("、"));
+  }
+  if (Array.isArray(value.combos) && value.combos.length) {
+    const COMBO_LABELS = {
+      walk2_break20: "走2破20诀",
+      walkB_break80: "走B破80诀",
+      walkC_break20: "走C破20诀",
+    };
+    parts.push(value.combos.map((item) => COMBO_LABELS[item] || item).join("、"));
   }
   if (Array.isArray(value.states) && value.states.length) {
     parts.push(value.states.join("、"));
@@ -233,6 +290,38 @@ function subscriptionFiltersText(filters) {
   if (Array.isArray(value.directions) && value.directions.length) {
     parts.push(value.directions.map(directionLabel).join("/"));
   }
+  if (Array.isArray(value.gateTypes) && value.gateTypes.length) {
+    parts.push(value.gateTypes.map(gateTypeLabel).join("、"));
+  }
+  if (Array.isArray(value.eventTypes) && value.eventTypes.length) {
+    const EVENT_TYPE_LABELS = {
+      open: "开门",
+      close: "关门",
+      formation: "形成门",
+      formationAbove: "形成·无动作门上",
+      formationBelow: "形成·无动作门下",
+    };
+    parts.push(value.eventTypes.map((item) => EVENT_TYPE_LABELS[item] || item).join("、"));
+  }
+  if (Array.isArray(value.actions) && value.actions.length) {
+    const ACTION_LABELS = { open: "开门", close: "关门" };
+    parts.push(value.actions.map((item) => ACTION_LABELS[item] || item).join("、"));
+  }
+  if (Array.isArray(value.liveStatuses) && value.liveStatuses.length) {
+    parts.push(value.liveStatuses.join("、"));
+  }
+  if (value.ma208Mode) {
+    const MA208_MODE_LABELS = {
+      near: "在MA208附近",
+      above: "在MA208以上",
+      nearOrAbove: "在MA208附近或以上",
+    };
+    const anchor = value.ma208Anchor === "currentPrice" ? "现价" : "门价";
+    const tolerance = Number(value.ma208TolerancePct || 1);
+    const toleranceText = value.ma208Mode === "above" ? "" : `（±${tolerance}%）`;
+    parts.push(`${anchor}${MA208_MODE_LABELS[value.ma208Mode] || value.ma208Mode}${toleranceText}`);
+  }
+  if (value.includeDeleted === true) parts.push("含已删除");
   if (Array.isArray(value.symbols) && value.symbols.length) {
     parts.push("品种：" + value.symbols.join("、"));
   }
@@ -240,6 +329,27 @@ function subscriptionFiltersText(filters) {
   if (value.limit) parts.push("最多" + value.limit + "条");
 
   return parts.length ? parts.join(" · ") : "全部信号";
+}
+
+function conditionText(condition) {
+  const parts = [factorLabel(condition.factorKey), filterPartsText(condition.filters)];
+  if (condition.role === "context") {
+    const joinParts = [];
+    if (Number(condition.frequencyOffset) === 1) joinParts.push("父级周期");
+    if (condition.sideRule === "below") joinParts.push("门价在下方");
+    if (condition.sideRule === "above") joinParts.push("门价在上方");
+    if (joinParts.length) parts.push(joinParts.join(" · "));
+  }
+  return parts.join("：");
+}
+
+function subscriptionFiltersText(sub) {
+  const conditions = Array.isArray(sub.conditions) ? sub.conditions : [];
+  if (conditions.length > 1) {
+    return conditions.map(conditionText).join(" + ");
+  }
+  const value = (conditions[0] && conditions[0].filters) || sub.filters || {};
+  return filterPartsText(value);
 }
 
 function subscriptionMatchTitle(match) {
@@ -256,54 +366,128 @@ function subscriptionMatchMeta(match) {
   const freq = firstDefined(match.frequency);
   const state = firstDefined(match.state, match.status);
   const walk = firstDefined(match.walkCode, match.walkMark, match.walkState);
-  const direction = firstDefined(match.direction, match.formation);
+  const direction = firstDefined(match.direction);
+  const gateType = match.gateType ? gateTypeLabel(match.gateType) : null;
+  const liveStatus = firstDefined(match.liveStatus);
   const parts = [];
   if (freq) parts.push(frequencyLabel(freq));
-  if (state) parts.push(signalStatusLabel(state));
+  if (state) {
+    parts.push(signalStatusLabel(state, match.gateType));
+  } else if (gateType) {
+    parts.push(gateType);
+  }
+  if (liveStatus) parts.push(liveStatus);
+  const canonicalGateState = /^(OPEN|CLOSED|FORMATION_ABOVE|FORMATION_BELOW)$/.test(state || "");
+  if (match.formation && !canonicalGateState) parts.push(match.formation);
+  if (match.gatePrice !== null && match.gatePrice !== undefined) {
+    parts.push("门价" + match.gatePrice);
+  }
+  if (match.ma208 !== null && match.ma208 !== undefined) {
+    const distance = firstDefined(match.gateMa208DistancePct);
+    if (distance !== null && distance !== undefined) {
+      const value = Number(distance);
+      if (Math.abs(value) < 0.005) {
+        parts.push("门价贴MA208");
+      } else if (value > 0) {
+        parts.push(`门价高于MA208 ${value}%`);
+      } else {
+        parts.push(`门价低于MA208 ${Math.abs(value)}%`);
+      }
+    } else {
+      parts.push("MA208 " + match.ma208);
+    }
+  }
   if (walk) parts.push(`走${walk}`);
   if (direction) parts.push(directionLabel(direction));
   if (match.changePercent !== null && match.changePercent !== undefined) {
     const prefix = Number(match.changePercent) > 0 ? "+" : "";
     parts.push(prefix + match.changePercent + "%");
   }
+  if (match.suggestedLeverage !== null && match.suggestedLeverage !== undefined) {
+    parts.push(`建议杠杆${match.suggestedLeverage}x`);
+  }
+  if (match.volatilityPct !== null && match.volatilityPct !== undefined) {
+    parts.push(`波动率${match.volatilityPct}%`);
+  }
+  for (const context of match.contexts || []) {
+    if (!context || !Array.isArray(context.matches)) continue;
+    for (const gate of context.matches) {
+      if (!gate) continue;
+      const gateType = gateTypeLabel(gate.gateType);
+      const liveStatus = firstDefined(gate.liveStatus, gate.status);
+      const gateText = [gateType, liveStatus].filter(Boolean).join("");
+      if (gateText) parts.push(gateText);
+      if (gate.gatePrice !== null && gate.gatePrice !== undefined) {
+        parts.push("门价" + gate.gatePrice);
+      }
+    }
+  }
   return parts.join(" · ");
 }
 
 function subscriptionMatchTimeValue(match) {
   const value = firstDefined(
-    match.updatedAt, match.generatedAt, match.generated_at,
     match.openAt, match.open_at,
-    match.barTime, match.bar_time
+    match.closeAt, match.close_at,
+    match.eventAt, match.event_at,
+    match.barTime, match.bar_time,
+    match.generatedAt, match.generated_at,
+    match.updatedAt,
+    match.crossTime, match.t2Time, match.t1Time
   );
   if (!value) return 0;
   const parsed = Date.parse(String(value));
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function pad2(value) {
-  return String(value).padStart(2, "0");
-}
-
 function formatSubscriptionTime(value) {
   const text = String(value || "");
   const parsed = Date.parse(text);
   if (!Number.isFinite(parsed)) return text.replace("T", " ").slice(0, 19);
-  const date = new Date(parsed);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(parsed));
+  const getPart = (type) => {
+    const part = parts.find((item) => item.type === type);
+    return part ? part.value : "00";
+  };
   return [
-    date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate()),
-    pad2(date.getHours()) + ":" + pad2(date.getMinutes()) + ":" + pad2(date.getSeconds()),
+    getPart("year") + "-" + getPart("month") + "-" + getPart("day"),
+    getPart("hour") + ":" + getPart("minute") + ":" + getPart("second"),
   ].join(" ");
 }
 
 function subscriptionMatchTimeText(match) {
   const value = firstDefined(
-    match.updatedAt, match.generatedAt, match.generated_at,
     match.openAt, match.open_at,
-    match.barTime, match.bar_time
+    match.closeAt, match.close_at,
+    match.eventAt, match.event_at,
+    match.barTime, match.bar_time,
+    match.generatedAt, match.generated_at,
+    match.updatedAt
   );
   if (!value) return "";
-  const label = firstDefined(match.updatedAt, match.generatedAt) ? "更新时间" : "信号时间";
-  return label + "：" + formatSubscriptionTime(value) + "（本地时间）";
+  const hasOpenTime = firstDefined(match.openAt, match.open_at);
+  const hasCloseTime = firstDefined(match.closeAt, match.close_at);
+  const hasUpdateTime = firstDefined(match.updatedAt, match.generatedAt, match.generated_at);
+  const state = firstDefined(match.state, match.status);
+  const label = hasOpenTime
+    ? "开门时间"
+    : hasCloseTime
+      ? "关门时间"
+      : state && String(state).includes("FORMATION")
+        ? "形成时间"
+        : hasUpdateTime
+          ? "更新时间"
+          : "信号时间";
+  return label + "：" + formatSubscriptionTime(value) + "（北京时间）";
 }
 
 function addSubscriptionMatch(parent, match) {
@@ -332,68 +516,148 @@ function addSubscriptionMatch(parent, match) {
   parent.appendChild(card);
 }
 
-function renderSubscriptionSnapshot(snapshot) {
-  if (!subscriptionFeedEl) return;
-  const subscriptions = snapshot || [];
-  subscriptionFeedEl.querySelectorAll(".subscription-card").forEach((el) => el.remove());
-  subscriptionFeedEl.querySelectorAll(".subscription-signal").forEach((el) => el.remove());
-
-  if (subscriptionCountEl) subscriptionCountEl.textContent = String(subscriptions.length);
-  if (!subscriptions.length) {
-    if (subscriptionEmptyEl) subscriptionEmptyEl.style.display = "block";
-    return;
-  }
-  if (subscriptionEmptyEl) subscriptionEmptyEl.style.display = "none";
-
-  for (const sub of subscriptions) {
-    const card = document.createElement("div");
-    card.className = "subscription-card";
-
-    const head = document.createElement("div");
-    head.className = "sub-head";
-    const title = document.createElement("div");
-    title.className = "sub-title";
-    title.textContent = subscriptionTitleText(sub);
-    const meta = document.createElement("div");
-    meta.className = "sub-meta";
-    meta.textContent = factorLabel(sub.factorKey) + " · " + subscriptionFiltersText(sub.filters);
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.textContent = "删除";
-    remove.addEventListener("click", async () => {
-      try {
-        await api(`/api/v1/signal-subscriptions/${sub.id}`, { method: "DELETE" });
-        loadSubscriptions();
-      } catch (err) {
-        addMessage("error", err.message);
+function enableHorizontalWheel(element) {
+  if (!element || element.dataset.hwheel === "1") return;
+  element.dataset.hwheel = "1";
+  element.addEventListener(
+    "wheel",
+    (event) => {
+      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+        event.preventDefault();
+        element.scrollLeft += event.deltaY;
       }
-    });
-    head.appendChild(title);
-    head.appendChild(remove);
+    },
+    { passive: false }
+  );
+}
 
-    card.appendChild(head);
-    card.appendChild(meta);
-    if (sub.error) {
+function buildSubscriptionCard(sub) {
+  const card = document.createElement("div");
+  card.className = "subscription-card";
+
+  const head = document.createElement("div");
+  head.className = "sub-head";
+  const title = document.createElement("div");
+  title.className = "sub-title";
+  title.textContent = subscriptionTitleText(sub);
+  const meta = document.createElement("div");
+  meta.className = "sub-meta";
+  meta.textContent = factorLabel(sub.factorKey) + " · " + subscriptionFiltersText(sub);
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.textContent = "删除";
+  remove.addEventListener("click", async () => {
+    try {
+      await api(`/api/v1/signal-subscriptions/${sub.id}`, { method: "DELETE" });
+      loadSubscriptions();
+    } catch (err) {
+      addMessage("error", err.message);
+    }
+  });
+  head.appendChild(title);
+  head.appendChild(remove);
+
+  card.appendChild(head);
+  card.appendChild(meta);
+  if (sub.error) {
+    const errEl = document.createElement("div");
+    errEl.className = "sub-error";
+    errEl.textContent = `订阅更新失败：${sub.error}`;
+    card.appendChild(errEl);
+  }
+  if (Array.isArray(sub.conditionErrors) && sub.conditionErrors.length) {
+    for (const conditionError of sub.conditionErrors) {
       const errEl = document.createElement("div");
       errEl.className = "sub-error";
-      errEl.textContent = `订阅更新失败：${sub.error}`;
+      errEl.textContent = `条件 ${factorLabel(conditionError.factorKey)} 更新失败：${conditionError.error}`;
       card.appendChild(errEl);
     }
-    subscriptionFeedEl.appendChild(card);
+  }
+  const strip = document.createElement("div");
+  strip.className = "sub-signal-strip";
+  card.appendChild(strip);
 
-    const sortedMatches = (sub.matches || []).slice().sort((a, b) => {
-      return subscriptionMatchTimeValue(b) - subscriptionMatchTimeValue(a);
-    });
-    for (const match of sortedMatches.slice(0, 20)) {
-      addSubscriptionMatch(card, match);
+  const sortedMatches = (sub.matches || []).slice().sort((a, b) => {
+    return subscriptionMatchTimeValue(b) - subscriptionMatchTimeValue(a);
+  });
+  for (const match of sortedMatches) {
+    addSubscriptionMatch(strip, match);
+  }
+  return card;
+}
+
+function buildSubscriptionGroup(group, subscriptions) {
+  const section = document.createElement("section");
+  section.className = "subscription-group";
+  if (collapsedSubscriptionGroups.has(group.key)) {
+    section.classList.add("collapsed");
+  }
+
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "subscription-group-head";
+  head.addEventListener("click", () => {
+    const collapsing = !section.classList.contains("collapsed");
+    section.classList.toggle("collapsed", collapsing);
+    if (collapsing) {
+      collapsedSubscriptionGroups.add(group.key);
+    } else {
+      collapsedSubscriptionGroups.delete(group.key);
     }
-    if ((sub.matches || []).length > 20) {
-      const more = document.createElement("div");
-      more.className = "sub-more";
-      more.textContent = `还有 ${sub.matches.length - 20} 条匹配`;
-      card.appendChild(more);
+  });
+
+  const label = document.createElement("span");
+  label.className = "subscription-group-label";
+  label.textContent = group.label;
+
+  const signalCount = subscriptions.reduce((sum, sub) => sum + (sub.matches || []).length, 0);
+  const count = document.createElement("span");
+  count.className = "subscription-group-count";
+  count.textContent = `${subscriptions.length} 订阅 · ${signalCount} 信号`;
+
+  const chevron = document.createElement("span");
+  chevron.className = "subscription-group-chevron";
+  chevron.textContent = "\u25be";
+  chevron.setAttribute("aria-hidden", "true");
+
+  head.appendChild(label);
+  head.appendChild(count);
+  head.appendChild(chevron);
+
+  const body = document.createElement("div");
+  body.className = "subscription-group-body";
+  if (!subscriptions.length) {
+    const empty = document.createElement("p");
+    empty.className = "group-empty";
+    empty.textContent = group.empty;
+    body.appendChild(empty);
+  } else {
+    for (const sub of subscriptions) {
+      body.appendChild(buildSubscriptionCard(sub));
     }
   }
+
+  section.appendChild(head);
+  section.appendChild(body);
+  return section;
+}
+
+function renderSubscriptionSnapshot(snapshot) {
+  if (!subscriptionFeedEl) return;
+  const subscriptions = Array.isArray(snapshot) ? snapshot : [];
+  subscriptionFeedEl.textContent = "";
+
+  if (subscriptionCountEl) subscriptionCountEl.textContent = String(subscriptions.length);
+  const visibleGroups = SUBSCRIPTION_GROUPS.filter(
+    (group) => group.key !== "crypto" || shadowMode
+  );
+  for (const group of visibleGroups) {
+    const groupSubs = subscriptions.filter(
+      (sub) => subscriptionDomain(sub.factorKey) === group.key
+    );
+    subscriptionFeedEl.appendChild(buildSubscriptionGroup(group, groupSubs));
+  }
+  subscriptionFeedEl.querySelectorAll(".subscription-group-body").forEach(enableHorizontalWheel);
 }
 
 function setSubscriptionRefreshHint(seconds) {
@@ -408,9 +672,12 @@ async function loadSubscriptions() {
     renderSubscriptionSnapshot((data && data.subscriptions) || []);
     if (data && data.refreshSeconds) setSubscriptionRefreshHint(data.refreshSeconds);
   } catch (err) {
-    if (subscriptionEmptyEl) {
-      subscriptionEmptyEl.textContent = `订阅加载失败：${err.message}`;
-      subscriptionEmptyEl.style.display = "block";
+    if (subscriptionFeedEl && !subscriptionFeedEl.querySelector(".subscription-group")) {
+      subscriptionFeedEl.textContent = "";
+      const error = document.createElement("p");
+      error.className = "group-empty";
+      error.textContent = `订阅加载失败：${err.message}`;
+      subscriptionFeedEl.appendChild(error);
     }
   }
 }

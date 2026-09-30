@@ -10,8 +10,8 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from ..composite_evaluator import evaluate_subscription
 from ..config import SIGNAL_SUBSCRIPTION_POLL_SECONDS
-from ..factor_registry import registry
 from ..security import get_actor
 from ..signal_subscriptions import (
     delete_signal_subscription,
@@ -31,35 +31,24 @@ async def build_snapshot(actor: Dict[str, Any]) -> List[Dict[str, Any]]:
     subscriptions = list_signal_subscriptions(user_id)
     snapshot: List[Dict[str, Any]] = []
     for sub in subscriptions:
-        item: Dict[str, Any] = {
-            "id": sub["id"],
-            "factorKey": sub["factorKey"],
-            "name": sub["name"],
-            "filters": sub["filters"],
-            "createdAt": sub["createdAt"],
-            "signal": None,
-            "summary": "",
-            "generatedAt": None,
-            "matches": [],
-            "error": None,
-        }
         try:
-            result = await registry.evaluate(
-                token_record=actor,
-                factor_key=sub["factorKey"],
-                params=sub["filters"],
-                audit=False,
-            )
-            item["signal"] = result.get("signal")
-            item["summary"] = result.get("summary")
-            item["generatedAt"] = result.get("generatedAt")
-            details = result.get("details") or {}
-            item["matches"] = details.get("events") or details.get("cells") or details.get("coins") or []
-        except HTTPException as exc:
-            detail = exc.detail
-            item["error"] = detail.get("message") if isinstance(detail, dict) else str(detail)
-        except Exception as exc:  # noqa: BLE001 - 订阅面板不能因单因子故障断流
-            item["error"] = "%s: %s" % (type(exc).__name__, exc)
+            item = await evaluate_subscription(actor, sub)
+        except Exception as exc:  # noqa: BLE001 - 订阅面板不能因单个订阅异常断流
+            item = {
+                "id": sub.get("id"),
+                "factorKey": sub.get("factorKey"),
+                "name": sub.get("name"),
+                "filters": sub.get("filters"),
+                "conditions": sub.get("conditions") or [],
+                "createdAt": sub.get("createdAt"),
+                "updatedAt": sub.get("updatedAt"),
+                "signal": None,
+                "summary": "",
+                "generatedAt": None,
+                "matches": [],
+                "conditionErrors": [],
+                "error": "%s: %s" % (type(exc).__name__, exc),
+            }
         snapshot.append(item)
     return snapshot
 

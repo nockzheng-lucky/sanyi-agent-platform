@@ -34,6 +34,7 @@ Skill（`docs/factors/`）三层开放。
     - `app/factors/crypto_market.py`：币圈行情因子（影子模式专用）
   - `app/engine/`：门信号读取、交易时段、轮询、SSE 总线（供外部接入）
   - `app/agent/filter_store.py`：Agent 自然语言筛选条件存储
+  - `app/composite_evaluator.py`：组合订阅条件评估（primary + context，AND 交叉匹配）
   - `app/api/`：健康检查、令牌、因子、信号事件、聊天接口
   - `app/agent/`：LLM 客户端与 function-calling 循环
   - `app/mcp/`：面向用户 Agent 的 MCP stdio 服务
@@ -79,10 +80,14 @@ python -m app.mcp
 - [x] 服务端会话历史：按账户持久化，切页/刷新后自动恢复
 - [x] 因子列表 + 加载到 Agent + 自然语言组合/调整筛选条件
 - [x] 持续信号订阅：Agent 确认后，聊天页左侧订阅面板持续显示匹配信号
+- [x] 订阅全面事件化：只有 `eventBased=true` 的因子可创建订阅，快照因子仅用于查询；新因子默认事件线
+- [x] 组合订阅条件层：primary + context 多因子 AND 交叉匹配（如“走2破20诀 + 下方有效地门”）
 - [x] Pushplus 推送：按订阅动态推送新匹配信号（用户绑定自己的 token）
 - [x] 因子：地门信号 `dimen_gate_signal`、诀与破诀 `jue_direction`
-- [x] 因子：门条件 `gate_condition`、走法×破诀组合 `wave_jue_combo`（当前快照版）
+- [x] 因子：门条件 `gate_condition`、期货今日门信号 `futures_gate_signal`、走法×破诀组合 `wave_jue_combo`（当前快照版）
 - [x] 影子模式：158 管理员专属币圈行情因子 `crypto_market`
+- [x] 币圈因子对齐：`crypto_gate_condition`（币圈门条件）、`crypto_gate_signal`（币圈今日开门事件）、`crypto_wave_jue_combo`（币圈走法×破诀组合）
+- [x] 币圈建议杠杆：ETH=50x 锚定，按波动率反比换算，下限 10x / 上限 50x
 - [x] `SANYI_GATE_EVENTS_DB` 接生产 SQLite 联调
 - [x] 真实 LLM 联调（DeepSeek key 到位后填 `.env`）
 - [x] MCP stdio 服务端 + Skill 文档（REST / MCP / Skill 三层开放）

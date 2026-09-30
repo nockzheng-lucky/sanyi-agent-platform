@@ -8,7 +8,12 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import HTTPException
 
-from ..config import CRYPTO_JUE_URL, CRYPTO_TIMEOUT_SECONDS, CRYPTO_VERIFY_SSL
+from ..config import (
+    CRYPTO_CONNECT_TIMEOUT_SECONDS,
+    CRYPTO_JUE_URL,
+    CRYPTO_TIMEOUT_SECONDS,
+    CRYPTO_VERIFY_SSL,
+)
 from .base import FactorContext, FactorSpec, now_iso
 
 FACTOR_KEY = "crypto_market"
@@ -146,7 +151,10 @@ async def _fetch_payload(client: Optional[httpx.AsyncClient] = None) -> Dict[str
     owns_client = client is None
     if client is None:
         client = httpx.AsyncClient(
-            timeout=httpx.Timeout(CRYPTO_TIMEOUT_SECONDS, connect=5.0),
+            timeout=httpx.Timeout(
+                CRYPTO_TIMEOUT_SECONDS,
+                connect=min(CRYPTO_CONNECT_TIMEOUT_SECONDS, CRYPTO_TIMEOUT_SECONDS),
+            ),
             verify=CRYPTO_VERIFY_SSL,
         )
     try:
@@ -354,4 +362,5 @@ crypto_market = FactorSpec(
     tags=["crypto", "jue", "direction", "long", "short", "broken", "shadow"],
     shadow_only=True,
     domain="crypto",
+    event_based=False,
 )

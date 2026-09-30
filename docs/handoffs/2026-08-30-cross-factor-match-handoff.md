@@ -1,7 +1,8 @@
 # 交接文档：走法破诀 × 门条件的交叉匹配
 
 日期：2026-08-30
-状态：已研判，未实现。等待用户确认后在新对话实现。
+状态：已实现组合订阅条件层（2026-08-30 新对话）。实现按第 5 节推荐架构，
+待确认项暂按本文件默认口径：5m/15m/1h、父级周期 +1 级、同品种同父周期多个门全部保留。
 
 **2026-08-30 用户补充澄清**：他不希望每类叠加都写成一个新固定因子，希望平台支持
 “AI 自动组合现有因子订阅的叠加”，即一个**定制化条件**，而不是新因子。本交接文档
@@ -336,5 +337,21 @@ factors.gate.latest
 ## 8. 已知边界
 
 - 当前 `wave_jue_combo` 和 `gate_condition` 都是最新快照，不区分破诀/走法先后
-- 平台订阅目前按单因子创建；组合订阅条件层是解决交叉匹配的通用路径
+- 组合订阅条件层已实现，当前交叉匹配仍基于最新快照
 - 币圈不在本需求范围，且币圈因子只对影子账号可见
+
+---
+
+## 9. 已实现说明（2026-08-30）
+
+- 新增 `subscription_conditions` 子表；`init_db()` 自动把旧单因子订阅补成 1 条 primary 条件。
+- 新增 `app/composite_evaluator.py`：
+  - 单条件订阅行为不变；
+  - 多条件按 `primary + context` 全 AND 交叉匹配；
+  - `frequencyOffset=1` 按 5m→15m→1h→1d→1w→1M 映射父级周期；
+  - `sideRule=below/above` 比较 context 门价与 primary 当前价；
+  - 组合结果保留 primary cell 全字段，并在 `contexts[].matches[]` 中保留命中的门对象。
+- `sanyi_create_subscription` 增加 `conditions`（支持嵌套 `join` 写法）；系统提示增加交叉匹配规则。
+- 订阅面板 `/matches`、SSE 与 Pushplus worker 都改走组合评估器；组合结果用稳定的
+  `eventId` 做推送去重，避免 currentPrice 抖动造成重复推送。
+- 测试：`tests/test_composite_subscriptions.py`，当前全量 `python -m pytest -q` 通过。

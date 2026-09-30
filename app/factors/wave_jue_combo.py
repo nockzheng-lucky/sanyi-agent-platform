@@ -5,7 +5,7 @@
 
 数据复用 jue_direction 的短缓存，不额外增加 qh 数据源压力。
 """
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from .base import FactorContext, FactorSpec, now_iso
 from .jue_direction import _cell_to_detail, _fetch_raw
@@ -72,13 +72,18 @@ _OUTPUT_SCHEMA: Dict[str, Any] = {
 }
 
 
-async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any]:
+async def _evaluate_with_fetch(
+    params: Dict[str, Any],
+    ctx: FactorContext,
+    fetch_raw: Callable[[], Awaitable[Dict[str, Any]]],
+    cell_to_detail: Callable[..., Dict[str, Any]] = _cell_to_detail,
+) -> Dict[str, Any]:
     combos = set(params.get("combos") or list(COMBOS.keys()))
     frequencies = {str(f).strip() for f in (params.get("frequencies") or []) if str(f).strip()}
     symbols = {str(s).strip().upper() for s in (params.get("symbols") or []) if str(s).strip()}
     limit = int(params.get("limit") or 30)
 
-    payload = await _fetch_raw()
+    payload = await fetch_raw()
     source_updated_at = payload.get("updated_at") or now_iso()
     matched: List[Dict[str, Any]] = []
     for sector in payload.get("sectors") or []:
@@ -102,7 +107,7 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
                     if combo_key not in combos:
                         continue
                     if state == spec["state"] and walk_code == spec["walkCode"]:
-                        detail = _cell_to_detail(sector, item, cell, source_updated_at)
+                        detail = cell_to_detail(sector, item, cell, source_updated_at)
                         detail["comboKey"] = combo_key
                         detail["comboLabel"] = spec["label"]
                         matched.append(detail)
@@ -156,6 +161,10 @@ async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any
     }
 
 
+async def _evaluate(params: Dict[str, Any], ctx: FactorContext) -> Dict[str, Any]:
+    return await _evaluate_with_fetch(params, ctx, _fetch_raw, _cell_to_detail)
+
+
 wave_jue_combo = FactorSpec(
     factor_key=FACTOR_KEY,
     name="走法×破诀组合（走2破20 / 走B破80 / 走C破20）",
@@ -171,4 +180,5 @@ wave_jue_combo = FactorSpec(
     risk_note="组合信号为当前快照口径，不区分破诀与走法发生先后；仅用于研究观察，不构成投资建议。",
     handler=_evaluate,
     tags=["wave", "jue", "combo", "walk2", "walkB", "walkC"],
+    event_based=False,
 )
